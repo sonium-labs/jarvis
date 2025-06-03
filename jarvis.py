@@ -75,6 +75,9 @@ def listen_for_voice_commands():
         elif "clear" in transcript:
             print("Clear queue command detected.")
             send_command("/clear")
+        elif "kill self" or "self destruct" in transcript:
+            print("Kill command detected.")
+            quit()
         else:
             print("No known command found.")
 
