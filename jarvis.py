@@ -9,6 +9,7 @@ import pyautogui
 ######### Configs #########
 textbox_x_padding = 300
 textbox_y_padding = 50
+discord_switch_delay = 0.4
 ###########################
 
 keyboard = Controller()
@@ -95,7 +96,7 @@ def focus_discord():
             print("Couldn't activate window")
             return False
 
-        time.sleep(0.4)
+        time.sleep(discord_switch_delay)
         return True
 
     except Exception as e:
