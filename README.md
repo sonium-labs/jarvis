@@ -10,7 +10,7 @@ Get a key from [here]([url](https://console.picovoice.ai/signup)) and create a n
 ## Setup
 `pip install pynput pygetwindow pyautogui screeninfo pyaudio vosk pvporcupine numpy`
 
-Put Discord on your second monitor, justified to the right so the text box is on the lower-right (told you this was hacky). I use this bot in a voice channel so the textbox is in the bottom right already, but if your text box is somewhere else, change the coordinates in the config section at the top of `jarvis.py`.
+Put Discord on your second monitor, justified to the right so the text box is on the lower-right (told you this was hacky). I use this bot in a voice channel so the textbox is in the bottom right by default, but if your text box is somewhere else, change the coordinates in the config section at the top of `jarvis.py`.
 
 ## Usage
 `python jarvis.py`
