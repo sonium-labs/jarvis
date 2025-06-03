@@ -6,8 +6,10 @@ import pygetwindow
 import time
 import pyautogui
 
+######### Configs #########
 textbox_x_padding = 300
 textbox_y_padding = 50
+###########################
 
 keyboard = Controller()
 
