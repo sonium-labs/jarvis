@@ -29,7 +29,7 @@ def click_text_input_field():
     original_x, original_y = pyautogui.position()
 
     x, y = get_discord_input_coords()
-    pyautogui.moveTo(x, y, duration=0)
+    pyautogui.moveTo(x, y, duration=0.01)
     pyautogui.click()
 
     pyautogui.moveTo(original_x, original_y, duration=0)
@@ -47,7 +47,7 @@ def listen_for_voice_commands():
         transcript = record_and_transcribe()
         print(f"You said: {transcript}")
 
-        if "now playing" in transcript:
+        if ("now" in transcript and "playing" in transcript):
             print("Now playing command detected.")
             send_command("/now-playing")
         elif "played" in transcript:
@@ -75,9 +75,8 @@ def listen_for_voice_commands():
         elif "clear" in transcript:
             print("Clear queue command detected.")
             send_command("/clear")
-        elif "kill self" or "self destruct" in transcript:
+        elif ("kill" in transcript and "self" in transcript) or ("self" in transcript and "destruct" in transcript):
             print("Kill command detected.")
-            quit()
         else:
             print("No known command found.")
 

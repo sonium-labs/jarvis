@@ -1,9 +1,24 @@
 import os
 import sys
 
-# suppress stderr output (from vosk) (and also accidentally Python errors oops)
-devnull = os.open(os.devnull, os.O_WRONLY)
-os.dup2(devnull, sys.stderr.fileno())
+class SuppressCStderr:
+    def __enter__(self):
+        self.stderr_fd = sys.stderr.fileno()
+
+        # Save a copy of the original stderr
+        self.saved_stderr_fd = os.dup(self.stderr_fd)
+
+        # Open /dev/null and redirect stderr to it
+        self.devnull_fd = os.open(os.devnull, os.O_WRONLY)
+        os.dup2(self.devnull_fd, self.stderr_fd)
+
+        return self  # <--- needed for context managers
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        # Restore original stderr
+        os.dup2(self.saved_stderr_fd, self.stderr_fd)
+        os.close(self.devnull_fd)
+        os.close(self.saved_stderr_fd)
 
 from vosk import Model, KaldiRecognizer
 import pyaudio
@@ -43,19 +58,21 @@ def record_and_transcribe():
     wf.close()
 
     print("Transcribing...")
-    model = Model("model")
-    rec = KaldiRecognizer(model, RATE)
 
-    wf = wave.open(WAVE_OUTPUT_FILENAME, "rb")
-    results = []
+    with SuppressCStderr():
+        model = Model("model")
+        rec = KaldiRecognizer(model, RATE)
 
-    while True:
-        data = wf.readframes(CHUNK)
-        if len(data) == 0:
-            break
-        if rec.AcceptWaveform(data):
-            result = json.loads(rec.Result())
-            results.append(result.get("text", ""))
+        wf = wave.open(WAVE_OUTPUT_FILENAME, "rb")
+        results = []
+
+        while True:
+            data = wf.readframes(CHUNK)
+            if len(data) == 0:
+                break
+            if rec.AcceptWaveform(data):
+                result = json.loads(rec.Result())
+                results.append(result.get("text", ""))
 
     final_text = " ".join(results).strip()
     return final_text
