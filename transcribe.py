@@ -1,7 +1,7 @@
 import os
 import sys
 
-# suppress stderr output (from vosk)
+# suppress stderr output (from vosk) (and also accidentally Python errors oops)
 devnull = os.open(os.devnull, os.O_WRONLY)
 os.dup2(devnull, sys.stderr.fileno())
 

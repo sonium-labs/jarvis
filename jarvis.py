@@ -50,14 +50,14 @@ def listen_for_voice_commands():
         if "now playing" in transcript:
             print("Now playing command detected.")
             send_command("/now-playing")
-        if "play" in transcript:
-            print("Play command detected.")
-            song_name = transcript.replace("play", "", 1).strip()
-            if song_name:
-                send_play_command(song_name)
         elif "played" in transcript:
             print("Play command detected.")
             song_name = transcript.replace("played", "", 1).strip()
+            if song_name:
+                send_play_command(song_name)
+        elif "play" in transcript:
+            print("Play command detected.")
+            song_name = transcript.replace("play", "", 1).strip()
             if song_name:
                 send_play_command(song_name)
         elif "stop" in transcript:
