@@ -3,7 +3,7 @@
 ## Overview
 Jarvis is a hacky script that will listen to your voice and send music bot commands in a Discord window of your choosing.
 
-Get a key from https://console.picovoice.ai/signup and create a new file called `.env` in the `jarvis` directory after you clone, with contents like so:
+Get a key from [here]([url](https://console.picovoice.ai/signup)) and create a new file called `.env` in the `jarvis` directory after you clone, with contents like so:
 
 `PORCUPINE_KEY="<YOUR-KEY-HERE>"`
 
