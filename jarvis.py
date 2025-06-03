@@ -7,7 +7,7 @@ import time
 import pyautogui
 
 keyboard = Controller()
-windows = pygetwindow.getWindowsWithTitle("")
+
 
 def get_discord_input_coords():
     monitors = get_monitors()
@@ -23,9 +23,13 @@ def get_discord_input_coords():
     return x, y
 
 def click_text_input_field():
+    original_x, original_y = pyautogui.position()
+
     x, y = get_discord_input_coords()
-    pyautogui.moveTo(x, y, duration=0.1)
+    pyautogui.moveTo(x, y, duration=0)
     pyautogui.click()
+
+    pyautogui.moveTo(original_x, original_y, duration=0)
 
 def type_like_macro(text, delay=0.03):
     for char in text:
@@ -71,23 +75,28 @@ def listen_for_voice_commands():
 
 def focus_discord():
     try:
-        for window in windows:
-            if "Discord" in window.title:
-                if window.isMinimized:
-                    window.restore()
-                    time.sleep(0.5)
-                try:
-                    window.activate()
-                except pygetwindow.PyGetWindowException:
-                    print("Couldn't activate window")
-                time.sleep(0.5)  # wait for the window to focus
-                return True
+        windows = pygetwindow.getWindowsWithTitle("Discord")
+        if not windows:
+            print("Discord window not found.")
+            return False
+
+        window = windows[0]  # Use the first match
+        if window.isMinimized:
+            window.restore()
+            time.sleep(0.5)
+
+        try:
+            window.activate()
+        except pygetwindow.PyGetWindowException:
+            print("Couldn't activate window")
+            return False
+
+        time.sleep(0.4)
+        return True
+
     except Exception as e:
         print(f"Error focusing Discord: {e}")
         return False
-
-    print("Discord window not found.")
-    return False
 
 def send_play_command(song_name: str):
     if not focus_discord():
@@ -117,7 +126,6 @@ def send_command(command: str):
     delay = 0.05
     click_text_input_field()
 
-    # Step 2: Type the command
     type_like_macro(f"{command}", delay=0.01)
 
     keyboard.press(Key.enter)
