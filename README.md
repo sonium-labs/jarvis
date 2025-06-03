@@ -10,12 +10,12 @@ Get a key from [here]([url](https://console.picovoice.ai/signup)) and create a n
 ## Setup
 `pip install pynput pygetwindow pyautogui screeninfo pyaudio vosk pvporcupine numpy`
 
-Put Discord on your second monitor, justified to the right so the text box is on the lower-right (told you this was hacky). I use this bot in a voice channel so the textbox is in the bottom right by default, but if your text box is somewhere else, change the coordinates in the config section at the top of `jarvis.py`.
+By default, put Discord on your second monitor, justified to the right so the text box is on the lower-right (told you this was hacky). I use this bot in a voice channel so the textbox is in the bottom right by default, but if your text box is somewhere else (or on a different monitor), update the config section at the top of `jarvis.py`.
 
 ## Usage
 `python jarvis.py`
 
-Then say: _"Jarvis, play hampster dance"_ and it will type `/play [tab] hampster dance` in your Discord window! Works with other common commands too:
+Then say: _"Jarvis, play hampster dance"_ (should use your default audio input) and it will type `/play [tab] hampster dance` in your Discord window! Works with other common commands too:
 
 | 🔤 Phrase              | 🛠️ Action Performed               | 📤 Command Sent                              |
 | ---------------------- | ---------------------------------- | --------------------------------------------- |

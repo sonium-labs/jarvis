@@ -6,24 +6,22 @@ import pygetwindow
 import time
 import pyautogui
 
-######### Configs #########
+########### Configs ###########
+monitor_number = 2 # 1 is Windows monitor 1, etc.
 textbox_x_padding = 300
 textbox_y_padding = 50
-discord_switch_delay = 0.4
-###########################
+discord_switch_delay_sec = 0.4
+###############################
 
 keyboard = Controller()
 
 def get_discord_input_coords():
     monitors = get_monitors()
-    if len(monitors) < 2:
-        raise RuntimeError("Second monitor not found.")
-
-    second = monitors[1]
+    target_monitor = monitors[monitor_number - 1] # don't hate me just helping out the homies
 
     # target area: bottom right with padding
-    x = second.x + second.width - textbox_x_padding
-    y = second.y + second.height - textbox_y_padding
+    x = target_monitor.x + target_monitor.width - textbox_x_padding
+    y = target_monitor.y + target_monitor.height - textbox_y_padding
 
     return x, y
 
@@ -43,25 +41,27 @@ def type_like_macro(text, delay=0.03):
 
 def listen_for_voice_commands():
     while True:
-        print("Waiting for wake word...")
+        print("Say \"Jarvis\" to wake...")
         wait_for_wake_word()
         print("Wake word detected.")
         transcript = record_and_transcribe()
         print(f"You said: {transcript}")
 
         if "now playing" in transcript:
-            print("Clear command detected.")
+            print("Now playing command detected.")
             send_command("/now-playing")
         if "play" in transcript:
-            song_name = transcript.replace("play", "").strip()
+            print("Play command detected.")
+            song_name = transcript.replace("play", "", 1).strip()
             if song_name:
                 send_play_command(song_name)
         elif "played" in transcript:
-            song_name = transcript.replace("played", "").strip()
+            print("Play command detected.")
+            song_name = transcript.replace("played", "", 1).strip()
             if song_name:
                 send_play_command(song_name)
         elif "stop" in transcript:
-            print("Stopping playback command detected.")
+            print("Stop playback command detected.")
             send_command("/stop")
         elif "pause" in transcript:
             print("Pause playback command detected.")
@@ -70,10 +70,10 @@ def listen_for_voice_commands():
             print("Resume playback command detected.")
             send_command("/resume")
         elif "next" in transcript:
-            print("Skip playback command detected.")
+            print("Skip track command detected.")
             send_command("/next")
         elif "clear" in transcript:
-            print("Clear command detected.")
+            print("Clear queue command detected.")
             send_command("/clear")
         else:
             print("No known command found.")
@@ -85,7 +85,7 @@ def focus_discord():
             print("Discord window not found.")
             return False
 
-        window = windows[0]  # Use the first match
+        window = windows[0]
         if window.isMinimized:
             window.restore()
             time.sleep(0.5)
@@ -96,7 +96,7 @@ def focus_discord():
             print("Couldn't activate window")
             return False
 
-        time.sleep(discord_switch_delay)
+        time.sleep(discord_switch_delay_sec)
         return True
 
     except Exception as e:
