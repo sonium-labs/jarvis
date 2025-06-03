@@ -6,8 +6,10 @@ import pygetwindow
 import time
 import pyautogui
 
-keyboard = Controller()
+textbox_x_padding = 300
+textbox_y_padding = 50
 
+keyboard = Controller()
 
 def get_discord_input_coords():
     monitors = get_monitors()
@@ -17,8 +19,8 @@ def get_discord_input_coords():
     second = monitors[1]
 
     # target area: bottom right with padding
-    x = second.x + second.width - 300
-    y = second.y + second.height - 50
+    x = second.x + second.width - textbox_x_padding
+    y = second.y + second.height - textbox_y_padding
 
     return x, y
 
