@@ -15,7 +15,7 @@ By default, put Discord on your second monitor, justified to the right so the te
 ## Usage
 `python jarvis.py`
 
-Then say: _"Jarvis, play hampster dance"_ (should use your default audio input) and it will type `/play [tab] hampster dance` in your Discord window! Works with other common commands too:
+Then say: _"Jarvis, play hamster dance"_ (should use your default audio input) and it will type `/play [tab] hamster dance` in your Discord window! Works with other common commands too:
 
 | 🔤 Phrase              | 🛠️ Action Performed               | 📤 Command Sent                              |
 | ---------------------- | ---------------------------------- | --------------------------------------------- |
