@@ -15,7 +15,7 @@ Put Discord on your second monitor, justified to the right so the text box is on
 ## Usage
 `python jarvis.py`
 
-Then say: _"Jarvis, play hampster dance"_ and it will type /play [tab] hampster dance in your target window! Works with other common commands too:
+Then say: _"Jarvis, play hampster dance"_ and it will type `/play [tab] hampster dance` in your target window! Works with other common commands too:
 
 | 🔤 Phrase              | 🛠️ Action Performed               | 📤 Command Sent                              |
 | ---------------------- | ---------------------------------- | --------------------------------------------- |
