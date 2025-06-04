@@ -1,163 +1,160 @@
 from wake_word import wait_for_wake_word
 from transcribe import record_and_transcribe
-from pynput.keyboard import Controller, Key
-from screeninfo import get_monitors
-import pygetwindow
-import time
-import pyautogui
+from pynput.keyboard import Controller
+import os
+from dotenv import load_dotenv
+import requests
+import threading
+import queue
+import signal
+import sys
+import asyncio
+import edge_tts
+from subprocess import call
 
-########### Configs ###########
-monitor_number = 2 # 1 is Windows monitor 1, etc.
-textbox_x_padding = 300
-textbox_y_padding = 50
-discord_switch_delay_sec = 0.5
-###############################
+# Load environment variables from .env file
+load_dotenv()
 
 keyboard = Controller()
 
-def get_discord_input_coords():
-    monitors = get_monitors()
-    target_monitor = monitors[monitor_number - 1] # don't hate me just helping out the homies
+guild_id = os.getenv("GUILD_ID")
+user_id = os.getenv("USER_ID")
+voice_channel_id = os.getenv("VOICE_CHANNEL_ID")
+server_ip = os.getenv("SERVER_IP")
 
-    # target area: bottom right with padding
-    x = target_monitor.x + target_monitor.width - textbox_x_padding
-    y = target_monitor.y + target_monitor.height - textbox_y_padding
+shutdown_event = threading.Event()
 
-    return x, y
+# TTS queue
+class TextToSpeechManager:
+    def __init__(self):
+        self.queue = queue.Queue()
+        self.thread = threading.Thread(target=self._process_queue, daemon=True)
+        self.thread.start()
 
-def click_text_input_field():
-    original_x, original_y = pyautogui.position()
+    def add_to_queue(self, phrase):
+        self.queue.put(phrase)
 
-    x, y = get_discord_input_coords()
-    pyautogui.moveTo(x, y, duration=0.01)
-    pyautogui.click()
+    def _process_queue(self):
+        while True:
+            phrase = self.queue.get()
+            if phrase is None:
+                break
+            call(["python3", "speak.py", phrase])
+            self.queue.task_done()
 
-    pyautogui.moveTo(original_x, original_y, duration=0)
+    def stop(self):
+        self.queue.put(None)
+        self.thread.join()
 
-def type_like_macro(text, delay=0.03):
-    for char in text:
-        keyboard.type(char)
-        time.sleep(delay)
+tts_manager = TextToSpeechManager()
+
+def speak(text: str):
+    tts_manager.add_to_queue(text)
 
 def listen_for_voice_commands():
-    while True:
+    while not shutdown_event.is_set():
         print("Say \"Jarvis\" to wake...")
         wait_for_wake_word()
+        if shutdown_event.is_set():
+            break
         print("Wake word detected.")
+        speak("Listening")  # Non-blocking
         transcript = record_and_transcribe()
         print(f"You said: {transcript}")
 
+        if shutdown_event.is_set():
+            break
+
         if ("now" in transcript and "playing" in transcript):
             print("Now playing command detected.")
-            send_command("/now-playing")
+            speak("Now playing.")
+            send_command("now-playing")
         elif "played" in transcript:
             print("Play command detected.")
             song_name = transcript.replace("played", "", 1).strip()
             if song_name:
+                speak(f"Playing {song_name}")
                 send_play_command(song_name)
         elif "play" in transcript:
             print("Play command detected.")
             song_name = transcript.replace("play", "", 1).strip()
             if song_name:
+                speak(f"Playing {song_name}")
                 send_play_command(song_name)
         elif "stop" in transcript:
             print("Stop playback command detected.")
-            send_command("/stop")
+            speak("Stopping playback.")
+            send_command("stop")
         elif "pause" in transcript:
             print("Pause playback command detected.")
-            send_command("/pause")
+            speak("Pausing playback.")
+            send_command("pause")
         elif "resume" in transcript:
             print("Resume playback command detected.")
-            send_command("/resume")
+            speak("Resuming playback.")
+            send_command("resume")
         elif "next" in transcript:
             print("Skip track command detected.")
-            send_command("/next")
+            speak("Skipping track.")
+            send_command("next")
         elif "clear" in transcript:
             print("Clear queue command detected.")
-            send_command("/clear")
+            speak("Clearing queue.")
+            send_command("clear")
         elif ("kill" in transcript and "self" in transcript) or ("self" in transcript and "destruct" in transcript):
             print("Kill command detected.")
-            quit()
+            speak("Goodbye.")
+            shutdown_event.set()
+            break
         else:
             print("No known command found.")
-
-def focus_discord():
-    try:
-        windows = pygetwindow.getWindowsWithTitle("Discord")
-        if not windows:
-            print("Discord window not found.")
-            return False
-
-        window = windows[0]
-        if window.isMinimized:
-            window.restore()
-            time.sleep(0.5)
-
-        try:
-            window.activate()
-        except pygetwindow.PyGetWindowException:
-            print("Couldn't activate window")
-            return False
-
-        time.sleep(discord_switch_delay_sec)
-        return True
-
-    except Exception as e:
-        print(f"Error focusing Discord: {e}")
-        return False
+            speak("Sorry, I didn't understand that command.")
 
 def send_play_command(song_name: str):
-    if not focus_discord():
-        return
-
-    delay = 0.05
-    click_text_input_field()
-
-    type_like_macro("/play", delay=0.01)
-
-    keyboard.press(Key.tab)
-    keyboard.release(Key.tab)
-
-    type_like_macro(f"{song_name}", delay=0.01)
-
-    keyboard.press(Key.enter)
-    keyboard.release(Key.enter)
-    time.sleep(delay)
-
-    pyautogui.hotkey('alt', 'tab')
-    time.sleep(0.5) # wait for the original window to focus
+    url = f"{server_ip}/command/play"
+    payload = {
+        "guildId": guild_id,
+        "userId": user_id,
+        "voiceChannelId": voice_channel_id,
+        "options": {"query": song_name}
+    }
+    response = requests.post(url, json=payload)
+    try:
+        return response.json()
+    except Exception:
+        print("Non-JSON response:", response.status_code, response.text)
+        return None
 
 def send_command(command: str):
-    if not focus_discord():
-        return
-
-    delay = 0.05
-    click_text_input_field()
-
-    type_like_macro(f"{command}", delay=0.01)
-
-    keyboard.press(Key.enter)
-    keyboard.release(Key.enter)
-    time.sleep(delay)
-
-    keyboard.press(Key.enter)
-    keyboard.release(Key.enter)
-    time.sleep(delay)
-
-    pyautogui.hotkey('alt', 'tab')
-    time.sleep(0.5) # wait for the original window to focus
+    url = f"{server_ip}/command/{command}"
+    payload = {
+        "guildId": guild_id,
+        "userId": user_id,
+        "voiceChannelId": voice_channel_id,
+        "options": {}
+    }
+    response = requests.post(url, json=payload)
+    try:
+        return response.json()
+    except Exception:
+        print("Non-JSON response:", response.status_code, response.text)
+        return None
 
 def main():
     print("Starting Jarvis...")
 
-    # for some reason you need to click the window first
-    # to ensure Discord window can be activated on first run???
-    # not even a manual click works...
+    def shutdown_handler(sig, frame):
+        print("\nShutting down Jarvis...")
+        shutdown_event.set()
+        tts_manager.stop()
 
-    click_text_input_field()
+    signal.signal(signal.SIGINT, shutdown_handler)
 
-    print("Starting voice command listener...")
-    listen_for_voice_commands()
+    listener_thread = threading.Thread(target=listen_for_voice_commands)
+    listener_thread.start()
+
+    listener_thread.join()
+    print("Jarvis exited cleanly.")
 
 if __name__ == "__main__":
     main()

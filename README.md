@@ -1,21 +1,29 @@
 # Jarvis
 
 ## Overview
-Jarvis is a hacky script that will listen to your voice and send music bot commands in a Discord window of your choosing.
+Jarvis is a script that will listen to your voice and send music bot commands to my Muse fork.
 
-Get a key from [here]([url](https://console.picovoice.ai/signup)) and create a new file called `.env` in the `jarvis` directory after you clone, with contents like so:
+Rename `.env.example` to `.env` in the `jarvis` directory after you clone. The contents look like so:
 
-`PORCUPINE_KEY="<YOUR-KEY-HERE>"`
+```
+PORCUPINE_KEY="<YOUR-KEY>"
+GUILD_ID=<YOUR-GUILD-ID>
+USER_ID=<YOUR-USER-ID>
+VOICE_CHANNEL_ID=<VOICE_CHANNEL_ID>
+SERVER_IP=<YOUR-SERVER-IP>
+```
+
+Get a Porcupine key from [here]([url](https://console.picovoice.ai/signup)), and put Discord in developer mode to right click on things to get the IDs.
 
 ## Setup
-`pip install pynput pygetwindow pyautogui screeninfo pyaudio vosk pvporcupine numpy`
+`pip install pynput pyaudio vosk pvporcupine pyttsx3 numpy`
 
-By default, put Discord on your second monitor, justified to the right so the text box is on the lower-right (told you this was hacky). I use this bot in a voice channel so the textbox is in the bottom right by default, but if your text box is somewhere else (or on a different monitor), update the config section at the top of `jarvis.py`.
+Then a human has to type `/join` in the target channel so the bot knows where to go.
 
 ## Usage
 `python jarvis.py`
 
-Then say: _"Jarvis, play hamster dance"_ (should use your default audio input) and it will type `/play [tab] hamster dance` in your Discord window! Works with other common commands too:
+Then say: _"Jarvis, play hamster dance"_ (should use your default audio input) and it will send the command! (Doesn't really tell you in that channel though, if we can write to a channel in a future update we're golden). Works with other common commands too:
 
 | 🔤 Phrase              | 🛠️ Action Performed               | 📤 Command Sent                              |
 | ---------------------- | ---------------------------------- | --------------------------------------------- |
