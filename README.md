@@ -1,7 +1,7 @@
 # Jarvis
 
 ## Overview
-Jarvis is a script that will listen to your voice and send music bot commands to my Muse fork.
+Jarvis is a tool that will listen to your voice and send music bot commands to my Muse fork.
 
 Rename `.env.example` to `.env` in the `jarvis` directory after you clone. The contents look like so:
 
