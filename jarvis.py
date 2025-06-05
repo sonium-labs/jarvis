@@ -1,160 +1,179 @@
+"""
+Main Jarvis voice assistant orchestrator.
+
+This module coordinates the voice assistant's core functionality, including:
+- Wake word detection
+- Speech-to-text transcription
+- Command interpretation
+- Text-to-speech response
+- Music control via REST API integration
+
+The assistant maintains a single shared microphone stream for efficiency
+and provides voice control over a remote music bot service.
+"""
+
 from wake_word import wait_for_wake_word
 from transcribe import record_and_transcribe
-from pynput.keyboard import Controller
-import os
 from dotenv import load_dotenv
-import requests
-import threading
-import queue
-import signal
-import sys
-import asyncio
-import edge_tts
-from subprocess import call
+import pyttsx3, requests, pyaudio, os, time, threading, queue
 
-# Load environment variables from .env file
-load_dotenv()
+# Initialize environment variables and global service objects
+load_dotenv()                                 # Load configuration from .env file
 
-keyboard = Controller()
-
-guild_id = os.getenv("GUILD_ID")
-user_id = os.getenv("USER_ID")
-voice_channel_id = os.getenv("VOICE_CHANNEL_ID")
-server_ip = os.getenv("SERVER_IP")
-
-shutdown_event = threading.Event()
-
-# TTS queue
-class TextToSpeechManager:
+# ─── async, interruptible text-to-speech ────────────────────────────────
+class AsyncTTS:
+    """Threaded pyttsx3 wrapper with .speak_async() and .stop()."""
     def __init__(self):
-        self.queue = queue.Queue()
-        self.thread = threading.Thread(target=self._process_queue, daemon=True)
-        self.thread.start()
+        self._q = queue.Queue()
+        self._thread = threading.Thread(target=self._worker, daemon=True)
+        self._thread.start()
 
-    def add_to_queue(self, phrase):
-        self.queue.put(phrase)
+    def _worker(self):
+        self.engine = pyttsx3.init()
+        for text in iter(self._q.get, None):   # sentinel None shuts down
+            self.engine.say(text)
+            self.engine.runAndWait()
 
-    def _process_queue(self):
-        while True:
-            phrase = self.queue.get()
-            if phrase is None:
-                break
-            call(["python3", "speak.py", phrase])
-            self.queue.task_done()
+    # enqueue text, return immediately
+    def speak_async(self, text: str):
+        self._q.put(text)
 
+    # interrupt current speech instantly
     def stop(self):
-        self.queue.put(None)
-        self.thread.join()
+        if hasattr(self, "engine"):
+            self.engine.stop()
 
-tts_manager = TextToSpeechManager()
+    # clean shutdown (call in main finally:)
+    def shutdown(self):
+        self._q.put(None)
 
-def speak(text: str):
-    tts_manager.add_to_queue(text)
+tts = AsyncTTS()                              # Async text-to-speech engine
 
-def listen_for_voice_commands():
-    while not shutdown_event.is_set():
-        print("Say \"Jarvis\" to wake...")
-        wait_for_wake_word()
-        if shutdown_event.is_set():
-            break
-        print("Wake word detected.")
-        speak("Listening")  # Non-blocking
-        transcript = record_and_transcribe()
-        print(f"You said: {transcript}")
+# Music bot configuration from environment
+guild_id = os.getenv("GUILD_ID")             # Discord server ID
+user_id = os.getenv("USER_ID")               # User's Discord ID
+voice_channel_id = os.getenv("VOICE_CHANNEL_ID")  # Target voice channel
 
-        if shutdown_event.is_set():
-            break
-
-        if ("now" in transcript and "playing" in transcript):
-            print("Now playing command detected.")
-            speak("Now playing.")
-            send_command("now-playing")
-        elif "played" in transcript:
-            print("Play command detected.")
-            song_name = transcript.replace("played", "", 1).strip()
-            if song_name:
-                speak(f"Playing {song_name}")
-                send_play_command(song_name)
-        elif "play" in transcript:
-            print("Play command detected.")
-            song_name = transcript.replace("play", "", 1).strip()
-            if song_name:
-                speak(f"Playing {song_name}")
-                send_play_command(song_name)
-        elif "stop" in transcript:
-            print("Stop playback command detected.")
-            speak("Stopping playback.")
-            send_command("stop")
-        elif "pause" in transcript:
-            print("Pause playback command detected.")
-            speak("Pausing playback.")
-            send_command("pause")
-        elif "resume" in transcript:
-            print("Resume playback command detected.")
-            speak("Resuming playback.")
-            send_command("resume")
-        elif "next" in transcript:
-            print("Skip track command detected.")
-            speak("Skipping track.")
-            send_command("next")
-        elif "clear" in transcript:
-            print("Clear queue command detected.")
-            speak("Clearing queue.")
-            send_command("clear")
-        elif ("kill" in transcript and "self" in transcript) or ("self" in transcript and "destruct" in transcript):
-            print("Kill command detected.")
-            speak("Goodbye.")
-            shutdown_event.set()
-            break
-        else:
-            print("No known command found.")
-            speak("Sorry, I didn't understand that command.")
+# Configure and initialize shared audio input stream
+RATE = 16_000                                # Sample rate in Hz
+CHUNK = 512                                  # Buffer size (matches Porcupine)
+_pa = pyaudio.PyAudio()
+shared_stream = _pa.open(format=pyaudio.paInt16,
+                        channels=1,
+                        rate=RATE,
+                        input=True,
+                        frames_per_buffer=CHUNK)
 
 def send_play_command(song_name: str):
-    url = f"{server_ip}/command/play"
+    """
+    Send request to music bot to play a specific song.
+
+    Args:
+        song_name: Name/query of the song to play
+
+    Returns:
+        dict: Response from the music bot API, or None on failure
+    """
+    url = "https://vibesbot.no-vibes.com/command/play"
     payload = {
         "guildId": guild_id,
         "userId": user_id,
         "voiceChannelId": voice_channel_id,
         "options": {"query": song_name}
     }
-    response = requests.post(url, json=payload)
     try:
-        return response.json()
-    except Exception:
-        print("Non-JSON response:", response.status_code, response.text)
-        return None
+        return requests.post(url, json=payload).json()
+    except Exception as e:
+        print("Play request failed:", e)
 
 def send_command(command: str):
-    url = f"{server_ip}/command/{command}"
+    """
+    Send a control command to the music bot.
+
+    Args:
+        command: Command name (e.g., 'pause', 'resume', 'stop')
+
+    Returns:
+        dict: Response from the music bot API, or None on failure
+    """
+    url = f"https://vibesbot.no-vibes.com/command/{command}"
     payload = {
         "guildId": guild_id,
         "userId": user_id,
         "voiceChannelId": voice_channel_id,
         "options": {}
     }
-    response = requests.post(url, json=payload)
     try:
-        return response.json()
-    except Exception:
-        print("Non-JSON response:", response.status_code, response.text)
-        return None
+        return requests.post(url, json=payload).json()
+    except Exception as e:
+        print("Command request failed:", e)
+
+def listen_for_voice_commands():
+    """
+    Main voice command loop.
+    
+    Continuously listens for wake word, transcribes subsequent speech,
+    interprets commands, and executes appropriate actions. Supports
+    music playback control and self-termination commands.
+    """
+    while True:
+        print('Say "Jarvis" to wake...')
+        wait_for_wake_word(shared_stream)           # Wait for activation
+        tts.stop()   # interrupt any ongoing speech
+        print("Wake word detected.")
+        tts.speak_async("Yes???")  # Acknowledge wake word
+        transcript = ""
+        for partial in record_and_transcribe(shared_stream):
+            # overwrite the current line with the growing sentence
+            print('\r' + partial + ' ' * 20, end='', flush=True)
+            transcript = partial          # will end up holding the final yield
+        print()                           # newline after the overwrite loop
+        print(f"You said: {transcript}")
+
+
+        # Command interpretation and execution
+        if ("now" in transcript and "playing" in transcript):
+            tts.speak_async("Now playing.")
+            send_command("now-playing")
+        elif "played" in transcript:
+            # Handle alternative phrasing for play command
+            song = transcript.replace("played", "", 1).strip()
+            if song:
+                tts.speak_async(f"Playing {song}")
+                send_play_command(song)
+        elif "play" in transcript:
+            song = transcript.replace("play", "", 1).strip()
+            if song:
+                tts.speak_async(f"Playing {song}")
+                send_play_command(song)
+        # Basic playback controls
+        elif "stop"   in transcript: tts.speak_async("Stopping.");  send_command("stop")
+        elif "pause"  in transcript: tts.speak_async("Pausing.");   send_command("pause")
+        elif "resume" in transcript: tts.speak_async("Resuming.");  send_command("resume")
+        elif "next"   in transcript: tts.speak_async("Skipping.");  send_command("next")
+        elif "clear"  in transcript: tts.speak_async("Clearing.");  send_command("clear")
+        # Exit commands
+        elif ("kill" in transcript and "self" in transcript) or \
+             ("self" in transcript and "destruct" in transcript):
+            tts.speak_async("Goodbye.")
+            break
+        else:
+            tts.speak_async("Sorry, I didn't understand that command.")
 
 def main():
-    print("Starting Jarvis...")
-
-    def shutdown_handler(sig, frame):
-        print("\nShutting down Jarvis...")
-        shutdown_event.set()
-        tts_manager.stop()
-
-    signal.signal(signal.SIGINT, shutdown_handler)
-
-    listener_thread = threading.Thread(target=listen_for_voice_commands)
-    listener_thread.start()
-
-    listener_thread.join()
-    print("Jarvis exited cleanly.")
+    """
+    Entry point: Initialize and run the voice assistant.
+    
+    Ensures proper cleanup of audio resources on exit.
+    """
+    try:
+        print("Starting Jarvis...")
+        listen_for_voice_commands()
+    finally:
+        # Clean up audio resources
+        shared_stream.close()
+        _pa.terminate()
+        tts.shutdown()
 
 if __name__ == "__main__":
     main()

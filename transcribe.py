@@ -1,82 +1,106 @@
-import os
-import sys
+"""
+Real-time speech transcription module using Vosk.
 
-class SuppressCStderr:
-    def __enter__(self):
-        self.stderr_fd = sys.stderr.fileno()
+This module provides continuous speech-to-text functionality with silence detection
+for automatic termination. It uses the Vosk offline speech recognition engine
+with a pre-loaded model for efficient, low-latency transcription.
+"""
 
-        # Save a copy of the original stderr
-        self.saved_stderr_fd = os.dup(self.stderr_fd)
-
-        # Open /dev/null and redirect stderr to it
-        self.devnull_fd = os.open(os.devnull, os.O_WRONLY)
-        os.dup2(self.devnull_fd, self.stderr_fd)
-
-        return self  # <--- needed for context managers
-
-    def __exit__(self, exc_type, exc_value, traceback):
-        # Restore original stderr
-        os.dup2(self.saved_stderr_fd, self.stderr_fd)
-        os.close(self.devnull_fd)
-        os.close(self.saved_stderr_fd)
-
-from vosk import Model, KaldiRecognizer
-import pyaudio
-import wave
 import json
+import numpy as np
 
-def record_and_transcribe():
-    RATE = 16000
-    CHUNK = 1024
-    RECORD_SECONDS = 4
-    WAVE_OUTPUT_FILENAME = "temp.wav"
+import sys, threading, time
 
-    p = pyaudio.PyAudio()
-    stream = p.open(format=pyaudio.paInt16,
-                    channels=1,
-                    rate=RATE,
-                    input=True,
-                    frames_per_buffer=CHUNK)
+# Audio stream configuration constants
+RATE = 16_000        # Sample rate in Hz, must match model's expected rate
+CHUNK = 512          # Number of frames per buffer - smaller values reduce latency
 
-    print("Recording...")
-    frames = []
+def _spinner(msg=""):
+    spinner = "|/-\\"
+    idx = 0
+    while not getattr(threading.current_thread(), "stop_spinner", False):
+        print(f"\r{msg} {spinner[idx % len(spinner)]}", end="", flush=True)
+        idx += 1
+        time.sleep(0.1)
+    print("\r" + " " * (len(msg) + 2) + "\r", end="", flush=True)
 
-    for _ in range(0, int(RATE / CHUNK * RECORD_SECONDS)):
-        data = stream.read(CHUNK)
-        frames.append(data)
+# Start spinner in a thread
+spinner_thread = threading.Thread(target=_spinner)
+spinner_thread.start()
 
-    print("Done recording.")
-    stream.stop_stream()
-    stream.close()
-    p.terminate()
+# Initialize Vosk components (done once at module load for performance)
+from vosk import Model, KaldiRecognizer
+model = Model("model")                # Load speech recognition model into memory
+rec = KaldiRecognizer(model, RATE)   # Create persistent recognition object
 
-    wf = wave.open(WAVE_OUTPUT_FILENAME, 'wb')
-    wf.setnchannels(1)
-    wf.setsampwidth(p.get_sample_size(pyaudio.paInt16))
-    wf.setframerate(RATE)
-    wf.writeframes(b''.join(frames))
-    wf.close()
+# Stop spinner
+spinner_thread.stop_spinner = True
+spinner_thread.join()
+print("Model loaded.")
 
-    print("Transcribing...")
+# Silence detection configuration
+RMS_THRESHOLD = 900               # Root Mean Square amplitude threshold for silence detection
+SILENCE_CHUNKS_END = int(1.2 * RATE / CHUNK)   # Number of silent chunks before stopping (~1.2 seconds)
+MAX_CHUNKS = int(6 * RATE / CHUNK)             # Maximum recording duration (6 seconds)
 
-    with SuppressCStderr():
-        model = Model("model")
-        rec = KaldiRecognizer(model, RATE)
+def record_and_transcribe(stream):
+    """
+    Record and transcribe audio from a PyAudio stream until silence is detected.
 
-        wf = wave.open(WAVE_OUTPUT_FILENAME, "rb")
-        results = []
+    The function implements a simple silence detection algorithm based on RMS amplitude
+    and automatically stops recording when either:
+    1. The specified duration of silence is detected (SILENCE_CHUNKS_END)
+    2. The maximum recording duration is reached (MAX_CHUNKS)
 
-        while True:
-            data = wf.readframes(CHUNK)
-            if len(data) == 0:
-                break
-            if rec.AcceptWaveform(data):
-                result = json.loads(rec.Result())
-                results.append(result.get("text", ""))
+    Args:
+        stream: PyAudio stream object configured with matching RATE and CHUNK settings
 
-    final_text = " ".join(results).strip()
-    return final_text
+    Returns:
+        str: Transcribed text, or empty string if no speech was detected
 
-if __name__ == "__main__":
-    text = record_and_transcribe()
-    print(f"You said: {text}")
+    Implementation details:
+        - Continuously feeds audio chunks to Vosk recognizer
+        - Calculates RMS amplitude for silence detection
+        - Maintains silence and total chunk counters for termination conditions
+    """
+    rec.Reset()                  # Clear any previous recognition state
+    silent = 0                  # Counter for consecutive silent chunks
+    total = 0                   # Counter for total chunks processed
+    last_partial = ""           # Last partial transcription (not used in final result)
+
+    while True:
+        # Read audio chunk from stream (non-blocking to prevent buffer overflow)
+        data = stream.read(CHUNK, exception_on_overflow=False)
+        rec.AcceptWaveform(data)    # Feed audio data to Vosk recognizer
+        total += 1
+        
+        # ----- Partial result streaming -----
+        partial_json = json.loads(rec.PartialResult())
+        partial = partial_json.get("partial", "").strip()
+        if partial and partial != last_partial:
+            yield partial                # stream out new words
+            last_partial = partial
+
+        # Convert audio data to numpy array for RMS calculation
+        audio_i16 = np.frombuffer(data, dtype=np.int16)
+        if audio_i16.size:
+            # Calculate Root Mean Square amplitude of the audio chunk
+            rms = np.sqrt(np.mean(audio_i16.astype(np.float32)**2))
+        else:
+            rms = 0.0          # Handle empty chunks gracefully
+
+        # Silence detection logic
+        if rms < RMS_THRESHOLD:
+            silent += 1
+            if silent >= SILENCE_CHUNKS_END:
+                break          # Stop if silence threshold duration is reached
+        else:
+            silent = 0        # Reset silence counter on detecting sound
+
+        # Safety timeout to prevent infinite recording
+        if total >= MAX_CHUNKS:
+            break
+
+    # Extract transcribed text from Vosk's JSON result
+    result = json.loads(rec.FinalResult())
+    return result.get("text", "").strip()
