@@ -49,6 +49,9 @@ class AsyncTTS:
 
 tts = AsyncTTS()                              # Async text-to-speech engine
 
+# HTTP session for reusing connections
+session = requests.Session()
+
 # Music bot configuration from environment
 guild_id = os.getenv("GUILD_ID")             # Discord server ID
 user_id = os.getenv("USER_ID")               # User's Discord ID
@@ -82,7 +85,7 @@ def send_play_command(song_name: str):
         "options": {"query": song_name}
     }
     try:
-        return requests.post(url, json=payload).json()
+        return session.post(url, json=payload).json()
     except Exception as e:
         print("Play request failed:", e)
 
@@ -104,7 +107,7 @@ def send_command(command: str):
         "options": {}
     }
     try:
-        return requests.post(url, json=payload).json()
+        return session.post(url, json=payload).json()
     except Exception as e:
         print("Command request failed:", e)
 
@@ -121,7 +124,6 @@ def listen_for_voice_commands():
         wait_for_wake_word(shared_stream)           # Wait for activation
         tts.stop()   # interrupt any ongoing speech
         print("Wake word detected.")
-        tts.speak_async("Yes???")  # Acknowledge wake word
         transcript = ""
         for partial in record_and_transcribe(shared_stream):
             # overwrite the current line with the growing sentence
