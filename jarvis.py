@@ -21,8 +21,9 @@ import pyttsx3
 import requests
 from dotenv import load_dotenv
 
-from transcribe import record_and_transcribe
+from transcribe import record_and_transcribe, get_rms_threshold, set_rms_threshold, get_silence_duration_seconds, set_silence_duration
 from wake_word import wait_for_wake_word
+import console_ui
 
 # Initialize environment variables and global service objects
 load_dotenv()                                 # Load configuration from .env file
@@ -68,9 +69,9 @@ music_bot_base_url = os.getenv("MUSIC_BOT_URL")
 
 # Add a check for music_bot_base_url
 if music_bot_base_url is None:
-    print("\nERROR: The MUSIC_BOT_URL environment variable is not set.")
-    print("Please ensure it is defined in your .env file (e.g., MUSIC_BOT_URL=http://localhost:3000/api/).")
-    print("Music bot commands will not function.\n")
+    console_ui.print_error("ERROR: The MUSIC_BOT_URL environment variable is not set.")
+    console_ui.print_error("Please ensure it is defined in your .env file (e.g., MUSIC_BOT_URL=http://localhost:3000/api/).")
+    console_ui.print_error("Music bot commands will not function.")
     # Optionally, you could raise an exception here or set a flag to disable music commands
     # For now, it will print the error and continue, but API calls will fail.
 
@@ -105,7 +106,7 @@ def send_play_command(song_name: str):
     try:
         return session.post(url, json=payload).json()
     except Exception as e:
-        print(f"Play request failed: {e}")
+        console_ui.print_error(f"Play request failed: {e}")
         return None
 
 def send_command(command: str):
@@ -128,7 +129,7 @@ def send_command(command: str):
     try:
         return session.post(url, json=payload).json()
     except Exception as e:
-        print(f"Command request failed: {e}")
+        console_ui.print_error(f"Command request failed: {e}")
         return None
 
 def listen_for_voice_commands():
@@ -140,7 +141,7 @@ def listen_for_voice_commands():
     music playback control and self-termination commands.
     """
     while True:
-        print('Say "Jarvis" to wake...')
+        console_ui.print_command_prompt()
         # wait_for_wake_word now returns the pre-buffered audio
         pre_buffered_audio = wait_for_wake_word(shared_stream)
         
@@ -148,20 +149,20 @@ def listen_for_voice_commands():
         # or an error occurred. We can choose to continue or handle it.
         # For now, we'll proceed, and transcribe.py will handle an empty buffer.
         if not pre_buffered_audio:
-            print("Warning: No pre-buffered audio received. Proceeding without it.")
+            console_ui.print_warning("Warning: No pre-buffered audio received. Proceeding without it.")
             # Optionally, you could 'continue' here to re-listen if this is critical
 
         tts.stop()   # interrupt any ongoing speech
-        print("Wake word detected.")
         tts.speak_async("Yes?")  # Acknowledge wake word
+        console_ui.print_jarvis_response("Yes?")
         
         transcript = ""
         # Pass the pre_buffered_audio to record_and_transcribe
         for partial in record_and_transcribe(shared_stream, initial_audio_buffer=pre_buffered_audio):
             # overwrite the current line with the growing sentence
-            print('\r' + partial + ' ' * 20, end='', flush=True)
+            console_ui.print_transcription_feedback(partial)
             transcript = partial          # will end up holding the final yield
-        print()                           # newline after the overwrite loop
+        console_ui.clear_line_then_print() # Clears the partial transcription line
         # Remove "Jarvis" if it's at the beginning of the transcript, case-insensitively,
         # and handle potential following comma/space.
         cleaned_transcript = transcript 
@@ -173,11 +174,12 @@ def listen_for_voice_commands():
 
         # Check for 'cancel' command first
         if "cancel" in cleaned_transcript.lower():
-            print("User said 'cancel'. Aborting current command.")
+            console_ui.print_info("User said 'cancel'. Aborting current command.")
             tts.speak_async("Cancelled.")
+            console_ui.print_jarvis_response("Cancelled.")
             continue # Skip the rest of command processing and listen for wake word again
 
-        print(f"You said: {cleaned_transcript}")
+        console_ui.print_user_said(cleaned_transcript)
 
 
         # Command interpretation and execution
@@ -186,6 +188,7 @@ def listen_for_voice_commands():
 
         if ("now" in command_text_for_matching and "playing" in command_text_for_matching):
             tts.speak_async("Now playing.")
+            console_ui.print_jarvis_response("Now playing.")
             send_command("now-playing")
         elif "played" in command_text_for_matching:
             # Extract song name. Find the start of "played" in the lowercased command string.
@@ -195,6 +198,7 @@ def listen_for_voice_commands():
             song = cleaned_transcript[idx + len("played"):].strip()
             if song:
                 tts.speak_async(f"Playing {song}")
+                console_ui.print_jarvis_response(f"Playing {song}")
                 send_play_command(song)
         elif "play" in command_text_for_matching:
             # Similar to "played", extract song name after "play".
@@ -203,21 +207,68 @@ def listen_for_voice_commands():
             song = cleaned_transcript[idx + len("play"):].strip()
             if song:
                 tts.speak_async(f"Playing {song}")
+                console_ui.print_jarvis_response(f"Playing {song}")
                 send_play_command(song)
         # Basic playback controls
-        elif "stop"   in command_text_for_matching: tts.speak_async("Stopping.");  send_command("stop")
-        elif "pause"  in command_text_for_matching: tts.speak_async("Pausing.");   send_command("pause")
-        elif "resume" in command_text_for_matching: tts.speak_async("Resuming.");  send_command("resume")
-        elif "next"   in command_text_for_matching: tts.speak_async("Skipping.");  send_command("next")
-        elif "clear"  in command_text_for_matching: tts.speak_async("Clearing.");  send_command("clear")
+        elif "stop"   in command_text_for_matching: 
+            tts.speak_async("Stopping.")
+            console_ui.print_jarvis_response("Stopping.")
+            send_command("stop")
+        elif "pause"  in command_text_for_matching: 
+            tts.speak_async("Pausing.")
+            console_ui.print_jarvis_response("Pausing.")
+            send_command("pause")
+        elif "resume" in command_text_for_matching: 
+            tts.speak_async("Resuming.")
+            console_ui.print_jarvis_response("Resuming.")
+            send_command("resume")
+        elif "next"   in command_text_for_matching: 
+            tts.speak_async("Skipping.")
+            console_ui.print_jarvis_response("Skipping.")
+            send_command("next")
+        elif "clear"  in command_text_for_matching: 
+            tts.speak_async("Clearing.")
+            console_ui.print_jarvis_response("Clearing.")
+            send_command("clear")
         # Exit commands
         elif ("kill" in command_text_for_matching and "self" in command_text_for_matching) or \
              ("self" in command_text_for_matching and "destruct" in command_text_for_matching):
             tts.speak_async("Goodbye.")
+            console_ui.print_jarvis_response("Goodbye.")
             break
         else:
             if cleaned_transcript: # Only say "Huh?" if there was actual text after cleaning
                 tts.speak_async("Huh?")
+                console_ui.print_jarvis_response("Huh?")
+
+def prompt_for_silence_settings():
+    """Prompts the user to adjust silence detection settings at startup."""
+    console_ui.print_header("Silence Detection Settings (Optional)")
+
+    # RMS Threshold
+    current_rms = get_rms_threshold()
+    console_ui.print_info(f"Current RMS Threshold: {current_rms} (Default: 900)")
+    console_ui.print_info("Lower values are more sensitive to silence; higher values are less sensitive.")
+    new_rms_str = console_ui.console.input(f"[prompt_style]Enter new RMS Threshold (e.g., 500-1500) or press Enter to keep [{current_rms}]: [/prompt_style]").strip()
+    if new_rms_str:
+        try:
+            new_rms = int(new_rms_str)
+            set_rms_threshold(new_rms)
+        except ValueError:
+            console_ui.print_warning(f"Invalid input: '{new_rms_str}'. RMS Threshold not changed.")
+
+    # Silence Duration
+    current_duration = get_silence_duration_seconds()
+    console_ui.print_info(f"\nCurrent Silence Duration: {current_duration:.1f}s (Default: 1.2s)")
+    console_ui.print_info("Longer duration allows for more pauses; shorter duration is more responsive.")
+    new_duration_str = console_ui.console.input(f"[prompt_style]Enter new Silence Duration in seconds (e.g., 0.8-2.5) or press Enter to keep [{current_duration:.1f}s]: [/prompt_style]").strip()
+    if new_duration_str:
+        try:
+            new_duration = float(new_duration_str)
+            set_silence_duration(new_duration)
+        except ValueError:
+            console_ui.print_warning(f"Invalid input: '{new_duration_str}'. Silence Duration not changed.")
+    console_ui.print_header("Settings Applied")
 
 def main():
     """
@@ -226,12 +277,14 @@ def main():
     Ensures proper cleanup of audio resources on exit.
     """
     try:
-        print("Starting Jarvis...")
+        console_ui.print_header("Jarvis Voice Assistant")
+        prompt_for_silence_settings() # Prompt user for silence settings before full initialization
+        console_ui.print_status("Starting Jarvis...")
         # Start the main loop to listen for wake word and commands
         listen_for_voice_commands()
     finally:
         # This block ensures that resources are cleaned up regardless of how the try block exits
-        print("\nShutting down Jarvis and cleaning up resources...")
+        console_ui.print_status("Shutting down Jarvis and cleaning up resources...")
         if 'shared_stream' in locals() and shared_stream.is_active():
             shared_stream.stop_stream()  # Stop the stream before closing
             shared_stream.close()        # Release the audio stream resource
@@ -239,7 +292,7 @@ def main():
             _pa.terminate()              # Terminate the PyAudio session
         if 'tts' in locals():
             tts.shutdown()               # Gracefully shut down the TTS worker thread
-        print("Cleanup complete. Goodbye!")
+        console_ui.print_success("Cleanup complete. Goodbye!")
 
 # Standard Python entry point: ensures main() is called only when the script is executed directly.
 if __name__ == "__main__":
