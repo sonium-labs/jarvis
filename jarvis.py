@@ -12,10 +12,17 @@ The assistant maintains a single shared microphone stream for efficiency
 and provides voice control over a remote music bot service.
 """
 
-from wake_word import wait_for_wake_word
-from transcribe import record_and_transcribe
+import os
+import queue
+import threading
+
+import pyaudio
+import pyttsx3
+import requests
 from dotenv import load_dotenv
-import pyttsx3, requests, pyaudio, os, threading, queue
+
+from transcribe import record_and_transcribe
+from wake_word import wait_for_wake_word
 
 # Initialize environment variables and global service objects
 load_dotenv()                                 # Load configuration from .env file
@@ -25,10 +32,11 @@ class AsyncTTS:
     """Threaded pyttsx3 wrapper with .speak_async() and .stop()."""
     def __init__(self):
         self._q = queue.Queue()
-        self._thread = threading.Thread(target=self._worker, daemon=True)
+        self._thread = threading.Thread(target=self._worker, daemon=True)  # daemon=True allows main program to exit even if thread is running
         self._thread.start()
 
     def _worker(self):
+        """Dedicated worker thread for pyttsx3 engine operations."""
         self.engine = pyttsx3.init()
         for text in iter(self._q.get, None):   # sentinel None shuts down
             self.engine.say(text)
@@ -40,7 +48,7 @@ class AsyncTTS:
 
     # interrupt current speech instantly
     def stop(self):
-        if hasattr(self, "engine"):
+        if hasattr(self, "engine"):  # Check if engine has been initialized
             self.engine.stop()
 
     # clean shutdown (call in main finally:)
@@ -49,7 +57,7 @@ class AsyncTTS:
 
 tts = AsyncTTS()                              # Async text-to-speech engine
 
-# HTTP session for reusing connections
+# HTTP session for reusing connections (improves performance by pooling connections)
 session = requests.Session()
 
 # Music bot configuration from environment
@@ -58,15 +66,24 @@ user_id = os.getenv("USER_ID")               # User's Discord ID
 voice_channel_id = os.getenv("VOICE_CHANNEL_ID")  # Target voice channel
 music_bot_base_url = os.getenv("MUSIC_BOT_URL")
 
+# Add a check for music_bot_base_url
+if music_bot_base_url is None:
+    print("\nERROR: The MUSIC_BOT_URL environment variable is not set.")
+    print("Please ensure it is defined in your .env file (e.g., MUSIC_BOT_URL=http://localhost:3000/api/).")
+    print("Music bot commands will not function.\n")
+    # Optionally, you could raise an exception here or set a flag to disable music commands
+    # For now, it will print the error and continue, but API calls will fail.
+
 # Configure and initialize shared audio input stream
-RATE = 16_000                                # Sample rate in Hz
-CHUNK = 512                                  # Buffer size (matches Porcupine)
-_pa = pyaudio.PyAudio()
-shared_stream = _pa.open(format=pyaudio.paInt16,
-                        channels=1,
-                        rate=RATE,
-                        input=True,
-                        frames_per_buffer=CHUNK)
+RATE = 16_000                                # Audio sample rate in Hz (samples per second)
+CHUNK = 512                                  # Number of audio frames per buffer (chunk size)
+_pa = pyaudio.PyAudio()                      # Private PyAudio instance for managing audio resources
+shared_stream = _pa.open(format=pyaudio.paInt16,  # 16-bit PCM audio format
+                        channels=1,                 # Mono audio
+                        rate=RATE,                  # Sample rate
+                        input=True,                 # Specifies that this is an input stream
+                        frames_per_buffer=CHUNK)    # Number of frames per buffer
+# This shared_stream is used by both wake word detection and transcription modules.
 
 def send_play_command(song_name: str):
     """
@@ -80,15 +97,16 @@ def send_play_command(song_name: str):
     """
     url = f"{music_bot_base_url}play"
     payload = {
-        "guildId": guild_id,
-        "userId": user_id,
-        "voiceChannelId": voice_channel_id,
-        "options": {"query": song_name}
+        "guildId": guild_id,                # Discord Server ID where the bot operates
+        "userId": user_id,                  # Discord User ID of the person issuing the command
+        "voiceChannelId": voice_channel_id,  # Discord Voice Channel ID to join/play in
+        "options": {"query": song_name}      # Command-specific options, here the song query
     }
     try:
         return session.post(url, json=payload).json()
     except Exception as e:
-        print("Play request failed:", e)
+        print(f"Play request failed: {e}")
+        return None
 
 def send_command(command: str):
     """
@@ -102,15 +120,16 @@ def send_command(command: str):
     """
     url = f"{music_bot_base_url}{command}"
     payload = {
-        "guildId": guild_id,
-        "userId": user_id,
-        "voiceChannelId": voice_channel_id,
-        "options": {}
+        "guildId": guild_id,                # Discord Server ID
+        "userId": user_id,                  # Discord User ID
+        "voiceChannelId": voice_channel_id,  # Discord Voice Channel ID
+        "options": {}                       # General commands usually don't need specific options
     }
     try:
         return session.post(url, json=payload).json()
     except Exception as e:
-        print("Command request failed:", e)
+        print(f"Command request failed: {e}")
+        return None
 
 def listen_for_voice_commands():
     """
@@ -122,47 +141,77 @@ def listen_for_voice_commands():
     """
     while True:
         print('Say "Jarvis" to wake...')
-        wait_for_wake_word(shared_stream)           # Wait for activation
+        # wait_for_wake_word now returns the pre-buffered audio
+        pre_buffered_audio = wait_for_wake_word(shared_stream)
+        
+        # If pre_buffered_audio is empty, it might mean Porcupine isn't initialized
+        # or an error occurred. We can choose to continue or handle it.
+        # For now, we'll proceed, and transcribe.py will handle an empty buffer.
+        if not pre_buffered_audio:
+            print("Warning: No pre-buffered audio received. Proceeding without it.")
+            # Optionally, you could 'continue' here to re-listen if this is critical
+
         tts.stop()   # interrupt any ongoing speech
         print("Wake word detected.")
         tts.speak_async("Yes?")  # Acknowledge wake word
+        
         transcript = ""
-        for partial in record_and_transcribe(shared_stream):
+        # Pass the pre_buffered_audio to record_and_transcribe
+        for partial in record_and_transcribe(shared_stream, initial_audio_buffer=pre_buffered_audio):
             # overwrite the current line with the growing sentence
             print('\r' + partial + ' ' * 20, end='', flush=True)
             transcript = partial          # will end up holding the final yield
         print()                           # newline after the overwrite loop
-        print(f"You said: {transcript}")
+        # Remove "Jarvis" if it's at the beginning of the transcript, case-insensitively,
+        # and handle potential following comma/space.
+        cleaned_transcript = transcript 
+        words = transcript.split(None, 1) # Split into first word and the rest
+        if words and words[0].lower().rstrip(',') == "jarvis":
+            cleaned_transcript = words[1] if len(words) > 1 else ""
+        
+        cleaned_transcript = cleaned_transcript.strip() # Final strip for good measure
+
+        print(f"You said: {cleaned_transcript}")
 
 
         # Command interpretation and execution
-        if ("now" in transcript and "playing" in transcript):
+        # Use a lowercased version of the cleaned_transcript for command matching.
+        command_text_for_matching = cleaned_transcript.lower()
+
+        if ("now" in command_text_for_matching and "playing" in command_text_for_matching):
             tts.speak_async("Now playing.")
             send_command("now-playing")
-        elif "played" in transcript:
-            # Handle alternative phrasing for play command
-            song = transcript.replace("played", "", 1).strip()
+        elif "played" in command_text_for_matching:
+            # Extract song name. Find the start of "played" in the lowercased command string.
+            idx = command_text_for_matching.find("played")
+            # Slice the original-casing 'cleaned_transcript' from after "played" to get the song name.
+            # This preserves the original capitalization of the song title.
+            song = cleaned_transcript[idx + len("played"):].strip()
             if song:
                 tts.speak_async(f"Playing {song}")
                 send_play_command(song)
-        elif "play" in transcript:
-            song = transcript.replace("play", "", 1).strip()
+        elif "play" in command_text_for_matching:
+            # Similar to "played", extract song name after "play".
+            idx = command_text_for_matching.find("play")
+            # Slice the original-casing 'cleaned_transcript' to preserve song title capitalization.
+            song = cleaned_transcript[idx + len("play"):].strip()
             if song:
                 tts.speak_async(f"Playing {song}")
                 send_play_command(song)
         # Basic playback controls
-        elif "stop"   in transcript: tts.speak_async("Stopping.");  send_command("stop")
-        elif "pause"  in transcript: tts.speak_async("Pausing.");   send_command("pause")
-        elif "resume" in transcript: tts.speak_async("Resuming.");  send_command("resume")
-        elif "next"   in transcript: tts.speak_async("Skipping.");  send_command("next")
-        elif "clear"  in transcript: tts.speak_async("Clearing.");  send_command("clear")
+        elif "stop"   in command_text_for_matching: tts.speak_async("Stopping.");  send_command("stop")
+        elif "pause"  in command_text_for_matching: tts.speak_async("Pausing.");   send_command("pause")
+        elif "resume" in command_text_for_matching: tts.speak_async("Resuming.");  send_command("resume")
+        elif "next"   in command_text_for_matching: tts.speak_async("Skipping.");  send_command("next")
+        elif "clear"  in command_text_for_matching: tts.speak_async("Clearing.");  send_command("clear")
         # Exit commands
-        elif ("kill" in transcript and "self" in transcript) or \
-             ("self" in transcript and "destruct" in transcript):
+        elif ("kill" in command_text_for_matching and "self" in command_text_for_matching) or \
+             ("self" in command_text_for_matching and "destruct" in command_text_for_matching):
             tts.speak_async("Goodbye.")
             break
         else:
-            tts.speak_async("Huh?")
+            if cleaned_transcript: # Only say "Huh?" if there was actual text after cleaning
+                tts.speak_async("Huh?")
 
 def main():
     """
@@ -172,12 +221,20 @@ def main():
     """
     try:
         print("Starting Jarvis...")
+        # Start the main loop to listen for wake word and commands
         listen_for_voice_commands()
     finally:
-        # Clean up audio resources
-        shared_stream.close()
-        _pa.terminate()
-        tts.shutdown()
+        # This block ensures that resources are cleaned up regardless of how the try block exits
+        print("\nShutting down Jarvis and cleaning up resources...")
+        if 'shared_stream' in locals() and shared_stream.is_active():
+            shared_stream.stop_stream()  # Stop the stream before closing
+            shared_stream.close()        # Release the audio stream resource
+        if '_pa' in locals():
+            _pa.terminate()              # Terminate the PyAudio session
+        if 'tts' in locals():
+            tts.shutdown()               # Gracefully shut down the TTS worker thread
+        print("Cleanup complete. Goodbye!")
 
+# Standard Python entry point: ensures main() is called only when the script is executed directly.
 if __name__ == "__main__":
     main()
