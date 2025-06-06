@@ -1,29 +1,37 @@
 # Jarvis
 
 ## Overview
-Jarvis is a tool that will listen to your voice and send music bot commands to my Muse fork.
+Jarvis is a small voice control script that listens for commands and sends them
+to a remote Discord music bot using HTTP requests.
 
-Rename `.env.example` to `.env` in the `jarvis` directory after you clone. The contents look like so:
+Get a key from [here](https://console.picovoice.ai/signup) and create a new file
+named `.env` in this directory containing your Porcupine and Discord details:
 
 ```
-PORCUPINE_KEY="<YOUR-KEY>"
-GUILD_ID=<YOUR-GUILD-ID>
-USER_ID=<YOUR-USER-ID>
-VOICE_CHANNEL_ID=<VOICE_CHANNEL_ID>
-SERVER_IP=<YOUR-SERVER-IP>
+PORCUPINE_KEY="<YOUR-PORCUPINE-KEY>"
+GUILD_ID="<DISCORD-GUILD-ID>"
+USER_ID="<YOUR-DISCORD-USER-ID>"
+VOICE_CHANNEL_ID="<TARGET-VOICE-CHANNEL-ID>"
+MUSIC_BOT_URL="<YOUR-MUSIC-BOT-URL>"
 ```
-
-Get a Porcupine key from [here]([url](https://console.picovoice.ai/signup)), and put Discord in developer mode to right click on things to get the IDs.
 
 ## Setup
-`pip install pynput pyaudio vosk pvporcupine pyttsx3 numpy`
+1. Install the required Python packages:
 
-Then a human has to type `/join` in the target channel so the bot knows where to go.
+```
+pip install pyaudio vosk pvporcupine numpy pyttsx3 requests python-dotenv
+```
+
+2. Download the Vosk English model from
+   [here](https://alphacephei.com/vosk/models/vosk-model-en-us-0.22.zip) and
+   extract its contents into the provided `model` directory.
+
 
 ## Usage
 `python jarvis.py`
 
-Then say: _"Jarvis, play hamster dance"_ (should use your default audio input) and it will send the command! (Doesn't really tell you in that channel though, if we can write to a channel in a future update we're golden). Works with other common commands too:
+Then say: _"Jarvis, play hampster dance"_ (using your default microphone) and Jarvis
+will instruct the music bot to play it. Works with other common commands too:
 
 | 🔤 Phrase              | 🛠️ Action Performed               | 📤 Command Sent                              |
 | ---------------------- | ---------------------------------- | --------------------------------------------- |
