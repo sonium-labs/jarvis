@@ -9,7 +9,7 @@ with a pre-loaded model for efficient, low-latency transcription.
 import json
 import numpy as np
 
-import sys, threading, time
+import threading, time
 
 # Audio stream configuration constants
 RATE = 16_000        # Sample rate in Hz, must match model's expected rate

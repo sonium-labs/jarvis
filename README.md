@@ -18,7 +18,7 @@ VOICE_CHANNEL_ID="<TARGET-VOICE-CHANNEL-ID>"
 1. Install the required Python packages:
 
 ```
-pip install pynput pyaudio vosk pvporcupine numpy pyttsx3 requests python-dotenv
+pip install pyaudio vosk pvporcupine numpy pyttsx3 requests python-dotenv
 ```
 
 2. Download the Vosk English model from

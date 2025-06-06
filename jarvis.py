@@ -15,7 +15,7 @@ and provides voice control over a remote music bot service.
 from wake_word import wait_for_wake_word
 from transcribe import record_and_transcribe
 from dotenv import load_dotenv
-import pyttsx3, requests, pyaudio, os, time, threading, queue
+import pyttsx3, requests, pyaudio, os, threading, queue
 
 # Initialize environment variables and global service objects
 load_dotenv()                                 # Load configuration from .env file
@@ -56,6 +56,7 @@ session = requests.Session()
 guild_id = os.getenv("GUILD_ID")             # Discord server ID
 user_id = os.getenv("USER_ID")               # User's Discord ID
 voice_channel_id = os.getenv("VOICE_CHANNEL_ID")  # Target voice channel
+music_bot_base_url = os.getenv("MUSIC_BOT_URL")
 
 # Configure and initialize shared audio input stream
 RATE = 16_000                                # Sample rate in Hz
@@ -77,7 +78,7 @@ def send_play_command(song_name: str):
     Returns:
         dict: Response from the music bot API, or None on failure
     """
-    url = "https://vibesbot.no-vibes.com/command/play"
+    url = f"{music_bot_base_url}play"
     payload = {
         "guildId": guild_id,
         "userId": user_id,
@@ -99,7 +100,7 @@ def send_command(command: str):
     Returns:
         dict: Response from the music bot API, or None on failure
     """
-    url = f"https://vibesbot.no-vibes.com/command/{command}"
+    url = f"{music_bot_base_url}{command}"
     payload = {
         "guildId": guild_id,
         "userId": user_id,
@@ -124,6 +125,7 @@ def listen_for_voice_commands():
         wait_for_wake_word(shared_stream)           # Wait for activation
         tts.stop()   # interrupt any ongoing speech
         print("Wake word detected.")
+        tts.speak_async("Yes?")  # Acknowledge wake word
         transcript = ""
         for partial in record_and_transcribe(shared_stream):
             # overwrite the current line with the growing sentence
@@ -160,7 +162,7 @@ def listen_for_voice_commands():
             tts.speak_async("Goodbye.")
             break
         else:
-            tts.speak_async("Sorry, I didn't understand that command.")
+            tts.speak_async("Huh?")
 
 def main():
     """
