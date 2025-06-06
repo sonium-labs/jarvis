@@ -4,6 +4,7 @@ from rich.text import Text
 from rich.panel import Panel
 from rich.theme import Theme
 from rich.rule import Rule
+"""from rich.align import Align"""
 
 # Define a custom theme for consistent styling
 custom_theme = Theme({
@@ -78,7 +79,7 @@ def print_user_said(text: str):
 
 def print_jarvis_response(text: str):
     """Prints Jarvis's spoken response in a Panel."""
-    console.print(Panel(Text(f'Jarvis: "{text}"', justify="left"), 
+    console.print(Panel(Text(f'Jarvis: "{text}"', justify="center"), 
                       title="[jarvis_response] Jarvis Responds[/jarvis_response]", 
                       border_style="jarvis_response", 
                       padding=(1,2)))

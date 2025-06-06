@@ -33,7 +33,7 @@ MAX_CHUNKS = int(6 * RATE / CHUNK)             # Max recording chunks: maximum n
 # --- Vosk Model Loading with Spinner ---
 _model_load_event = threading.Event() # Event to signal spinner thread to stop
 
-def _spinner_worker(event, msg="Loading Vosk model..."):
+def _spinner_worker(event, msg=""):
     """Displays a simple CLI spinner until the event is set."""
     spinner_chars = "|/-\\"
     idx = 0
