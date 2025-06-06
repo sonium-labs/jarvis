@@ -12,15 +12,22 @@ import threading
 
 import numpy as np
 from vosk import Model, KaldiRecognizer # Moved Vosk import to the top
+import console_ui
+import os
+from dotenv import load_dotenv
+
+load_dotenv() # Load environment variables for configurable settings
 
 # --- Configuration Constants ---
 # Audio stream configuration
 RATE = 16_000        # Sample rate in Hz: samples per second. Must match the Vosk model's expected rate.
 CHUNK = 512          # Frames per buffer: number of audio frames processed at a time. Smaller values can reduce latency but increase CPU load.
 
-# Silence detection configuration
-RMS_THRESHOLD = 900               # RMS amplitude: threshold below which audio is considered silent.
-SILENCE_CHUNKS_END = int(1.2 * RATE / CHUNK)   # Silent chunks to stop: number of consecutive silent chunks before transcription stops (approx. 1.2 seconds).
+# Silence detection configuration (configurable via .env)
+RMS_THRESHOLD = int(os.getenv("VOSK_RMS_THRESHOLD", "900"))
+SILENCE_DURATION_SECONDS = float(os.getenv("VOSK_SILENCE_DURATION_SECONDS", "1.2"))
+SILENCE_CHUNKS_END = int(SILENCE_DURATION_SECONDS * RATE / CHUNK)
+console_ui.print_info(f"Silence detection: RMS Threshold={RMS_THRESHOLD}, Duration={SILENCE_DURATION_SECONDS}s")
 MAX_CHUNKS = int(6 * RATE / CHUNK)             # Max recording chunks: maximum number of chunks to record before stopping (approx. 6 seconds).
 
 # --- Vosk Model Loading with Spinner ---
@@ -36,7 +43,7 @@ def _spinner_worker(event, msg="Loading Vosk model..."):
         time.sleep(0.1)
     print("\r" + " " * (len(msg) + 2) + "\r", end="", flush=True) # Clear spinner line
 
-print("Initializing Vosk model (this may take a moment)...")
+console_ui.print_status("Initializing Vosk model (this may take a moment)...")
 _spinner_thread = threading.Thread(target=_spinner_worker, args=(_model_load_event,))
 _spinner_thread.start()
 
@@ -48,7 +55,29 @@ rec = KaldiRecognizer(model, RATE)  # Creates a recognizer instance, configured 
 
 _model_load_event.set() # Signal spinner to stop
 _spinner_thread.join()  # Wait for spinner thread to finish
-print("Vosk model loaded successfully.")
+console_ui.print_success("Vosk model loaded successfully.")
+
+# --- Silence Detection Getters and Setters ---
+def get_rms_threshold() -> int:
+    """Returns the current RMS threshold for silence detection."""
+    return RMS_THRESHOLD
+
+def get_silence_duration_seconds() -> float:
+    """Returns the current silence duration in seconds."""
+    return SILENCE_DURATION_SECONDS
+
+def set_rms_threshold(new_threshold: int):
+    """Sets a new RMS threshold for silence detection."""
+    global RMS_THRESHOLD
+    RMS_THRESHOLD = new_threshold
+    console_ui.print_info(f"RMS Threshold updated to: {RMS_THRESHOLD}")
+
+def set_silence_duration(new_duration_seconds: float):
+    """Sets a new silence duration (in seconds) and recalculates SILENCE_CHUNKS_END."""
+    global SILENCE_DURATION_SECONDS, SILENCE_CHUNKS_END
+    SILENCE_DURATION_SECONDS = new_duration_seconds
+    SILENCE_CHUNKS_END = int(SILENCE_DURATION_SECONDS * RATE / CHUNK)
+    console_ui.print_info(f"Silence Duration updated to: {SILENCE_DURATION_SECONDS}s (SILENCE_CHUNKS_END: {SILENCE_CHUNKS_END})")
 
 def record_and_transcribe(stream, initial_audio_buffer=None):
     """
@@ -73,13 +102,13 @@ def record_and_transcribe(stream, initial_audio_buffer=None):
     # Prime the recognizer with the initial audio buffer if one is provided.
     # This is useful for including audio captured just before a command starts (e.g., rolling wake word buffer).
     if initial_audio_buffer:
-        print(f"Processing {len(initial_audio_buffer)} pre-buffered audio chunks...")
+        console_ui.print_info(f"Processing {len(initial_audio_buffer)} pre-buffered audio chunks...")
         for chunk_data in initial_audio_buffer:
             if isinstance(chunk_data, bytes):
                 rec.AcceptWaveform(chunk_data)  # Feed each chunk from the buffer to Vosk.
             else:
                 # This case should ideally not be reached if wake_word.py correctly returns a list of bytes.
-                print(f"Warning: Initial audio buffer contained non-bytes data: {type(chunk_data)}. Skipping this chunk.")
+                console_ui.print_warning(f"Warning: Initial audio buffer contained non-bytes data: {type(chunk_data)}. Skipping this chunk.")
     
     silent_chunks_count = 0  # Counter for consecutive chunks of audio below the RMS silence threshold.
     total_chunks_count = 0   # Counter for the total number of chunks processed from the live stream.
@@ -116,14 +145,13 @@ def record_and_transcribe(stream, initial_audio_buffer=None):
         if rms < RMS_THRESHOLD:  # If the chunk's RMS is below the silence threshold.
             silent_chunks_count += 1
             if silent_chunks_count >= SILENCE_CHUNKS_END: # If enough consecutive silent chunks are detected.
-                print("\nSilence detected, stopping transcription.")
                 break  # Stop recording and transcribing.
         else:
             silent_chunks_count = 0  # Reset silence counter if sound is detected (RMS >= threshold).
 
         # Safety timeout: Stop recording if it exceeds the maximum configured duration.
         if total_chunks_count >= MAX_CHUNKS:
-            print("\nMaximum recording duration reached, stopping transcription.")
+            console_ui.print_warning("Maximum recording duration reached, stopping transcription.")
             break
 
     # After the loop (due to silence or max duration), get the final transcription result.
