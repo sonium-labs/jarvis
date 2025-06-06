@@ -15,26 +15,24 @@ and provides voice control over a remote music bot service.
 from wake_word import wait_for_wake_word
 from transcribe import record_and_transcribe
 from dotenv import load_dotenv
-import subprocess, requests, pyaudio, os, time, threading, queue
+import pyttsx3, requests, pyaudio, os, time, threading, queue
 
 # Initialize environment variables and global service objects
 load_dotenv()                                 # Load configuration from .env file
 
 # ─── async, interruptible text-to-speech ────────────────────────────────
 class AsyncTTS:
-    """Threaded Piper wrapper with .speak_async() and .stop()."""
+    """Threaded pyttsx3 wrapper with .speak_async() and .stop()."""
     def __init__(self):
         self._q = queue.Queue()
         self._thread = threading.Thread(target=self._worker, daemon=True)
         self._thread.start()
 
     def _worker(self):
-        model = os.getenv("PIPER_MODEL", "en_US-danny-low")
+        self.engine = pyttsx3.init()
         for text in iter(self._q.get, None):   # sentinel None shuts down
-            self.proc = subprocess.Popen(
-                ["piper", "--model", model, "--speak", "--text", text]
-            )
-            self.proc.wait()
+            self.engine.say(text)
+            self.engine.runAndWait()
 
     # enqueue text, return immediately
     def speak_async(self, text: str):
@@ -42,8 +40,8 @@ class AsyncTTS:
 
     # interrupt current speech instantly
     def stop(self):
-        if hasattr(self, "proc") and self.proc.poll() is None:
-            self.proc.terminate()
+        if hasattr(self, "engine"):
+            self.engine.stop()
 
     # clean shutdown (call in main finally:)
     def shutdown(self):
