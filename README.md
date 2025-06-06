@@ -1,5 +1,6 @@
 # Jarvis
-![image](https://github.com/user-attachments/assets/5eb73a2d-b2f0-4741-aee7-4d9454a148a1)
+![image](https://github.com/user-attachments/assets/66ffb78c-fc72-410e-a3e4-7a785a508364)
+
 
 ## Overview
 Jarvis is a small voice control script that listens for commands and sends them
