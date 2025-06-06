@@ -4,7 +4,6 @@ from rich.text import Text
 from rich.panel import Panel
 from rich.theme import Theme
 from rich.rule import Rule
-"""from rich.align import Align"""
 
 # Define a custom theme for consistent styling
 custom_theme = Theme({
