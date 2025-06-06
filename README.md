@@ -12,24 +12,18 @@ PORCUPINE_KEY="<YOUR-PORCUPINE-KEY>"
 GUILD_ID="<DISCORD-GUILD-ID>"
 USER_ID="<YOUR-DISCORD-USER-ID>"
 VOICE_CHANNEL_ID="<TARGET-VOICE-CHANNEL-ID>"
-PIPER_MODEL="voices/en_US-danny-low.onnx"
 ```
 
 ## Setup
 1. Install the required Python packages:
 
 ```
-pip install pynput pyaudio vosk pvporcupine numpy piper-tts requests python-dotenv
+pip install pynput pyaudio vosk pvporcupine numpy pyttsx3 requests python-dotenv
 ```
 
 2. Download the Vosk English model from
    [here](https://alphacephei.com/vosk/models/vosk-model-en-us-0.22.zip) and
    extract its contents into the provided `model` directory.
-
-3. The repo ships with the lightweight `en_US-danny-low` voice model under
-   `voices/`. To use another Piper voice, download it from the
-   [Piper voice database](https://github.com/rhasspy/piper/releases) and set the
-   `PIPER_MODEL` environment variable to the path of the `.onnx` file.
 
 
 ## Usage
