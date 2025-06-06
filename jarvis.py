@@ -171,6 +171,12 @@ def listen_for_voice_commands():
         
         cleaned_transcript = cleaned_transcript.strip() # Final strip for good measure
 
+        # Check for 'cancel' command first
+        if "cancel" in cleaned_transcript.lower():
+            print("User said 'cancel'. Aborting current command.")
+            tts.speak_async("Cancelled.")
+            continue # Skip the rest of command processing and listen for wake word again
+
         print(f"You said: {cleaned_transcript}")
 
 
