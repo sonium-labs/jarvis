@@ -19,6 +19,7 @@ import threading
 import pyaudio
 import pyttsx3
 import requests
+import logging
 from dotenv import load_dotenv
 
 from transcribe import record_and_transcribe
@@ -37,7 +38,14 @@ class AsyncTTS:
 
     def _worker(self):
         """Dedicated worker thread for pyttsx3 engine operations."""
-        self.engine = pyttsx3.init()
+        try:
+            self.engine = pyttsx3.init()
+        except ValueError:
+            self.engine = pyttsx3.init()
+            voices = self.engine.getProperty("voices")
+            if voices:
+                self.engine.setProperty("voice", voices[0].id)
+            logging.warning("pyttsx3 init failed; using first available voice")
         for text in iter(self._q.get, None):   # sentinel None shuts down
             self.engine.say(text)
             self.engine.runAndWait()
