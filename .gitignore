@@ -28,7 +28,6 @@ MANIFEST
 
 # Model - ignore actual model files but keep the folder
 model/*
-!model/.gitkeep
 
 # PyInstaller
 #  Usually these files are written by a python script from a template
