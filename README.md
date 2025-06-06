@@ -34,11 +34,25 @@ Then say: _"Jarvis, play hampster dance"_ (using your default microphone) and Ja
 will instruct the music bot to play it. Works with other common commands too:
 
 | 🔤 Phrase              | 🛠️ Action Performed               | 📤 Command Sent                              |
-| ---------------------- | ---------------------------------- | --------------------------------------------- |
+| ---------------------- | ---------------------------------- | ------------------------------------- |
 | `"play [song name]"`   | Play a song by name                | `/play [song name]`                           |
 | `"now playing"`        | Display current track              | `/now-playing`                                |
 | `"pause"`              | Pause playback                     | `/pause`                                      |
 | `"resume"`             | Resume paused playback             | `/resume`                                     |
-| `"next"`               | Skip to the next song              | `/next`                                       |
+| `"next"`               | Skip to the next song              | `/next`                                      |
 | `"clear"`              | Clear the playlist or queue        | `/clear`                                      |
-| `"stop"`               | Stop playback                      | `/stop`                                       |
+| `"stop"`               | Stop playback                      | `/stop`                                      |
+
+## Troubleshooting
+
+### `unknown voice id` error
+
+If you encounter this `pyttsx3` error:
+
+1. Ensure your Python interpreter matches the architecture of your installed voices (64‑bit voices require 64‑bit Python, etc.).
+2. Select a built‑in SAPI5 voice like **"Microsoft David Desktop"**.
+3. Alternatively, edit `jarvis.py` and set a specific voice ID:
+
+   ```python
+   engine.setProperty("voice", <voice_id>)
+   ```
