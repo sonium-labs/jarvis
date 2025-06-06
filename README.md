@@ -24,7 +24,7 @@ pip install pyaudio vosk pvporcupine numpy pyttsx3 requests python-dotenv
 
 2. Download the Vosk English model from
    [here](https://alphacephei.com/vosk/models/vosk-model-en-us-0.22.zip) and
-   extract its contents into the provided `model` directory.
+   extract its contents into a new directory called `model`.
 
 
 ## Usage
