@@ -40,6 +40,7 @@ This document outlines the fundamental principles guiding the development of the
     *   Continuously profile and monitor performance to identify and address bottlenecks.
     *   Design UI feedback (console or otherwise) to be immediate, even if the full processing takes a moment (e.g., partial transcription updates).
     *   Silence detection parameters should be tunable to balance responsiveness with capturing the user's full intent.
+    *   Reuse HTTP connections when possible to minimize request latency, but allow disabling pooling if compatibility issues arise.
 
 ## 4. Modularity and Clarity
 

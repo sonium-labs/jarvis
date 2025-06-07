@@ -59,7 +59,9 @@ class AsyncTTS:
 tts = AsyncTTS()                              # Async text-to-speech engine
 
 # HTTP session for reusing connections (improves performance by pooling connections)
-session = requests.Session()
+# Set USE_HTTP_SESSION=0 in your .env to disable pooling if it causes issues.
+USE_HTTP_SESSION = os.getenv("USE_HTTP_SESSION", "1") != "0"
+session = requests.Session() if USE_HTTP_SESSION else requests
 
 # Music bot configuration from environment
 guild_id = os.getenv("GUILD_ID")             # Discord server ID
@@ -244,10 +246,15 @@ def listen_for_voice_commands():
 def prompt_for_silence_settings():
     """Prompts the user to adjust silence detection settings at startup."""
     console_ui.print_header("Silence Detection Settings (Optional)")
+    console_ui.print_info(
+        "Values are loaded from the VOSK_RMS_THRESHOLD and VOSK_SILENCE_DURATION_SECONDS variables in .env."
+    )
 
     # RMS Threshold
     current_rms = get_rms_threshold()
-    console_ui.print_info(f"Current RMS Threshold: {current_rms} (Default: 900)")
+    console_ui.print_info(
+        f"Current RMS Threshold: {current_rms} (Default: 900)"
+    )
     console_ui.print_info("Lower values are more sensitive to silence; higher values are less sensitive.")
     new_rms_str = console_ui.console.input(f"[prompt_style]Enter new RMS Threshold (e.g., 500-1500) or press Enter to keep [{current_rms}]: [/prompt_style]").strip()
     if new_rms_str:
@@ -259,7 +266,9 @@ def prompt_for_silence_settings():
 
     # Silence Duration
     current_duration = get_silence_duration_seconds()
-    console_ui.print_info(f"\nCurrent Silence Duration: {current_duration:.1f}s (Default: 1.2s)")
+    console_ui.print_info(
+        f"\nCurrent Silence Duration: {current_duration:.1f}s (Default: 1.2s)"
+    )
     console_ui.print_info("Longer duration allows for more pauses; shorter duration is more responsive.")
     new_duration_str = console_ui.console.input(f"[prompt_style]Enter new Silence Duration in seconds (e.g., 0.8-2.5) or press Enter to keep [{current_duration:.1f}s]: [/prompt_style]").strip()
     if new_duration_str:
