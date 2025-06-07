@@ -6,7 +6,7 @@
 Jarvis is a small voice control script that listens for commands and sends them
 to a remote Discord music bot using HTTP requests.
 
-Get a key from [here](https://console.picovoice.ai/signup) and create a new file
+Get a Porcupine key from [here](https://console.picovoice.ai/signup) and create a new file
 named `.env` in this directory containing your Porcupine and Discord details:
 
 ```
