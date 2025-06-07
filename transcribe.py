@@ -1,9 +1,13 @@
 """
 Real-time speech transcription module using Vosk.
 
-This module provides continuous speech-to-text functionality with silence detection
-for automatic termination. It uses the Vosk offline speech recognition engine
-with a pre-loaded model for efficient, low-latency transcription.
+This module provides continuous speech-to-text functionality with silence
+detection for automatic termination. It uses the Vosk offline speech recognition
+engine with a pre-loaded model for efficient, low-latency transcription.
+
+Silence detection sensitivity is configurable. Initial values come from the
+optional environment variables `VOSK_RMS_THRESHOLD` and
+`VOSK_SILENCE_DURATION_SECONDS`, and Jarvis lets you adjust them at startup.
 """
 
 import json
