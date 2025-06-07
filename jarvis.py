@@ -56,7 +56,7 @@ class AsyncTTS:
     def shutdown(self):
         self._q.put(None)
 
-tts = AsyncTTS()                              # Async text-to-speech engine
+tts = AsyncTTS()                            # Async text-to-speech engine
 
 # HTTP session for reusing connections (improves performance by pooling connections)
 session = requests.Session()
@@ -86,7 +86,7 @@ shared_stream = _pa.open(format=pyaudio.paInt16,  # 16-bit PCM audio format
                         frames_per_buffer=CHUNK)    # Number of frames per buffer
 # This shared_stream is used by both wake word detection and transcription modules.
 
-def send_play_command(song_name: str, max_retries: int = 3, retry_delay: float = 1.0):
+def send_play_command(song_name: str, max_retries: int = 3, retry_delay: float = 1.0, immediate: bool = False):
     """
     Send request to music bot to play a specific song, with retry logic.
 
@@ -94,6 +94,7 @@ def send_play_command(song_name: str, max_retries: int = 3, retry_delay: float =
         song_name: Name/query of the song to play
         max_retries: Maximum number of retries on failure
         retry_delay: Delay (in seconds) between retries
+        immediate: Whether to include the "immediate" option in the API call
 
     Returns:
         dict: Response from the music bot API, or None on failure
@@ -103,8 +104,12 @@ def send_play_command(song_name: str, max_retries: int = 3, retry_delay: float =
         "guildId": guild_id,                # Discord Server ID where the bot operates
         "userId": user_id,                  # Discord User ID of the person issuing the command
         "voiceChannelId": voice_channel_id,  # Discord Voice Channel ID to join/play in
-        "options": {"query": song_name}      # Command-specific options, here the song query
+        "options": {
+            "query": song_name,
+            "immediate": immediate           # Include the "immediate" option
+        }
     }
+
     for attempt in range(1, max_retries + 1):
         try:
             response = session.post(url, json=payload)
@@ -147,6 +152,29 @@ def send_command(command: str, max_retries: int = 3, retry_delay: float = 1.0):
                 print("Max retries reached. Command request failed.")
                 return None
             time.sleep(retry_delay)  # Wait before retrying
+
+def handle_play_command(cleaned_transcript: str, keyword: str):
+    """
+    Handle play-related commands by extracting the song name and calling send_play_command.
+
+    Args:
+        cleaned_transcript: The cleaned user input.
+        keyword: The keyword to look for in the transcript (e.g., "play", "played").
+    """
+    idx = cleaned_transcript.lower().find(keyword)
+    remaining_text = cleaned_transcript[idx + len(keyword):].strip()  # Extract text after the keyword
+
+    # Check if "immediate" is in the remaining text
+    immediate = False
+    if remaining_text.lower().startswith("immediate"):
+        immediate = True
+        # Remove "immediate" from the remaining text
+        remaining_text = remaining_text[len("immediate"):].strip()
+
+    song = remaining_text  # The remaining text is the song name
+    if song:
+        tts.speak_async(f"Playing {song}")
+        send_play_command(song, immediate=immediate)
 
 def listen_for_voice_commands():
     """
@@ -202,28 +230,25 @@ def listen_for_voice_commands():
             tts.speak_async("Now playing.")
             send_command("now-playing")
         elif "played" in command_text_for_matching:
-            # Extract song name. Find the start of "played" in the lowercased command string.
-            idx = command_text_for_matching.find("played")
-            # Slice the original-casing 'cleaned_transcript' from after "played" to get the song name.
-            # This preserves the original capitalization of the song title.
-            song = cleaned_transcript[idx + len("played"):].strip()
-            if song:
-                tts.speak_async(f"Playing {song}")
-                send_play_command(song)
+            handle_play_command(cleaned_transcript, keyword="played")
         elif "play" in command_text_for_matching:
-            # Similar to "played", extract song name after "play".
-            idx = command_text_for_matching.find("play")
-            # Slice the original-casing 'cleaned_transcript' to preserve song title capitalization.
-            song = cleaned_transcript[idx + len("play"):].strip()
-            if song:
-                tts.speak_async(f"Playing {song}")
-                send_play_command(song)
+            handle_play_command(cleaned_transcript, keyword="play")
         # Basic playback controls
-        elif "stop"   in command_text_for_matching: tts.speak_async("Stopping.");  send_command("stop")
-        elif "pause"  in command_text_for_matching: tts.speak_async("Pausing.");   send_command("pause")
-        elif "resume" in command_text_for_matching: tts.speak_async("Resuming.");  send_command("resume")
-        elif "next"   in command_text_for_matching: tts.speak_async("Skipping.");  send_command("next")
-        elif "clear"  in command_text_for_matching: tts.speak_async("Clearing.");  send_command("clear")
+        elif "stop" in command_text_for_matching:
+            tts.speak_async("Stopping.")
+            send_command("stop")
+        elif "pause" in command_text_for_matching:
+            tts.speak_async("Pausing.")
+            send_command("pause")
+        elif "resume" in command_text_for_matching:
+            tts.speak_async("Resuming.")
+            send_command("resume")
+        elif "next" in command_text_for_matching:
+            tts.speak_async("Skipping.")
+            send_command("next")
+        elif "clear" in command_text_for_matching:
+            tts.speak_async("Clearing.")
+            send_command("clear")
         # Exit commands
         elif ("kill" in command_text_for_matching and "self" in command_text_for_matching) or \
              ("self" in command_text_for_matching and "destruct" in command_text_for_matching):
