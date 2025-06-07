@@ -15,6 +15,7 @@ and provides voice control over a remote music bot service.
 import os
 import queue
 import threading
+import time
 
 import pyaudio
 import pyttsx3
@@ -85,12 +86,14 @@ shared_stream = _pa.open(format=pyaudio.paInt16,  # 16-bit PCM audio format
                         frames_per_buffer=CHUNK)    # Number of frames per buffer
 # This shared_stream is used by both wake word detection and transcription modules.
 
-def send_play_command(song_name: str):
+def send_play_command(song_name: str, max_retries: int = 3, retry_delay: float = 1.0):
     """
-    Send request to music bot to play a specific song.
+    Send request to music bot to play a specific song, with retry logic.
 
     Args:
         song_name: Name/query of the song to play
+        max_retries: Maximum number of retries on failure
+        retry_delay: Delay (in seconds) between retries
 
     Returns:
         dict: Response from the music bot API, or None on failure
@@ -102,18 +105,26 @@ def send_play_command(song_name: str):
         "voiceChannelId": voice_channel_id,  # Discord Voice Channel ID to join/play in
         "options": {"query": song_name}      # Command-specific options, here the song query
     }
-    try:
-        return session.post(url, json=payload).json()
-    except Exception as e:
-        print(f"Play request failed: {e}")
-        return None
+    for attempt in range(1, max_retries + 1):
+        try:
+            response = session.post(url, json=payload)
+            response.raise_for_status()  # Raise an HTTPError for bad responses (4xx and 5xx)
+            return response.json()
+        except (requests.exceptions.ConnectionError, requests.exceptions.RequestException) as e:
+            print(f"Attempt {attempt} to play '{song_name}' failed: {e}")
+            if attempt == max_retries:
+                print("Max retries reached. Play request failed.")
+                return None
+            time.sleep(retry_delay)  # Wait before retrying
 
-def send_command(command: str):
+def send_command(command: str, max_retries: int = 3, retry_delay: float = 1.0):
     """
-    Send a control command to the music bot.
+    Send a control command to the music bot, with retry logic.
 
     Args:
         command: Command name (e.g., 'pause', 'resume', 'stop')
+        max_retries: Maximum number of retries on failure
+        retry_delay: Delay (in seconds) between retries
 
     Returns:
         dict: Response from the music bot API, or None on failure
@@ -125,16 +136,21 @@ def send_command(command: str):
         "voiceChannelId": voice_channel_id,  # Discord Voice Channel ID
         "options": {}                       # General commands usually don't need specific options
     }
-    try:
-        return session.post(url, json=payload).json()
-    except Exception as e:
-        print(f"Command request failed: {e}")
-        return None
+    for attempt in range(1, max_retries + 1):
+        try:
+            response = session.post(url, json=payload)
+            response.raise_for_status()  # Raise an HTTPError for bad responses (4xx and 5xx)
+            return response.json()
+        except (requests.exceptions.ConnectionError, requests.exceptions.RequestException) as e:
+            print(f"Attempt {attempt} to send command '{command}' failed: {e}")
+            if attempt == max_retries:
+                print("Max retries reached. Command request failed.")
+                return None
+            time.sleep(retry_delay)  # Wait before retrying
 
 def listen_for_voice_commands():
     """
     Main voice command loop.
-    
     Continuously listens for wake word, transcribes subsequent speech,
     interprets commands, and executes appropriate actions. Supports
     music playback control and self-termination commands.
@@ -143,7 +159,6 @@ def listen_for_voice_commands():
         print('Say "Jarvis" to wake...')
         # wait_for_wake_word now returns the pre-buffered audio
         pre_buffered_audio = wait_for_wake_word(shared_stream)
-        
         # If pre_buffered_audio is empty, it might mean Porcupine isn't initialized
         # or an error occurred. We can choose to continue or handle it.
         # For now, we'll proceed, and transcribe.py will handle an empty buffer.
@@ -154,7 +169,6 @@ def listen_for_voice_commands():
         tts.stop()   # interrupt any ongoing speech
         print("Wake word detected.")
         tts.speak_async("Yes?")  # Acknowledge wake word
-        
         transcript = ""
         # Pass the pre_buffered_audio to record_and_transcribe
         for partial in record_and_transcribe(shared_stream, initial_audio_buffer=pre_buffered_audio):
@@ -164,11 +178,11 @@ def listen_for_voice_commands():
         print()                           # newline after the overwrite loop
         # Remove "Jarvis" if it's at the beginning of the transcript, case-insensitively,
         # and handle potential following comma/space.
-        cleaned_transcript = transcript 
+        cleaned_transcript = transcript
         words = transcript.split(None, 1) # Split into first word and the rest
         if words and words[0].lower().rstrip(',') == "jarvis":
             cleaned_transcript = words[1] if len(words) > 1 else ""
-        
+
         cleaned_transcript = cleaned_transcript.strip() # Final strip for good measure
 
         # Check for 'cancel' command first
@@ -222,7 +236,7 @@ def listen_for_voice_commands():
 def main():
     """
     Entry point: Initialize and run the voice assistant.
-    
+
     Ensures proper cleanup of audio resources on exit.
     """
     try:
