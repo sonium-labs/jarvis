@@ -2,23 +2,20 @@
 Main Jarvis voice assistant orchestrator.
 """
 
+import logging
 import os
 import queue
 import threading
 import time
 import weakref
-import logging
 
+import comtypes.client
 import pyaudio
 import pyttsx3
-import requests
-import comtypes.client
-from dotenv import load_dotenv
 import pyttsx3.drivers.sapi5 as sapi5
-import threading
-import queue
-import comtypes.client
 import pythoncom
+import requests
+from dotenv import load_dotenv
 
 from transcribe import record_and_transcribe
 from wake_word import wait_for_wake_word
