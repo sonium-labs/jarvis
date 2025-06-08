@@ -15,7 +15,7 @@ import time
 import threading
 
 import numpy as np
-from vosk import Model, KaldiRecognizer # Moved Vosk import to the top
+from vosk import Model, KaldiRecognizer
 import console_ui
 import os
 from dotenv import load_dotenv
