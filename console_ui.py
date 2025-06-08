@@ -83,17 +83,3 @@ def print_jarvis_response(text: str):
                       border_style="jarvis_response", 
                       padding=(1,2)))
 
-if __name__ == "__main__":
-    print_header("Jarvis Voice Assistant - UI Test")
-    print_status("Initializing system...")
-    print_success("System ready.")
-    print_info("Using default microphone.")
-    print_warning("Low battery warning.")
-    print_error("Failed to connect to API.")
-    print_command_prompt()
-    print_transcription_feedback("testing one two three... this is a partial transcript")
-    input("Press Enter to see cleared line and final messages...") # Pauses to show effect
-    clear_line_then_print()
-    print_user_said("play some music")
-    print_jarvis_response("Okay, playing some music.")
-    print_user_said("") # Test empty recognition
