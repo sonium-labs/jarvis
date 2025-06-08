@@ -1,0 +1,7 @@
+pyaudio
+vosk
+pvporcupine
+numpy
+pyttsx3
+requests
+python-dotenv
