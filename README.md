@@ -18,11 +18,13 @@ MUSIC_BOT_URL="<YOUR-MUSIC-BOT-URL>"
 ```
 
 ## Setup
-1. Install the required Python packages:
+1. Install the required Python packages by running the helper script:
 
 ```
-pip install pyaudio vosk pvporcupine numpy pyttsx3 requests python-dotenv
+./install_dependencies.sh
 ```
+
+   The script installs everything listed in `requirements.txt` using `pip`.
 
 2. Download the Vosk English model from
    [here](https://alphacephei.com/vosk/models/vosk-model-en-us-0.22.zip) and
