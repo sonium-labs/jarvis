@@ -17,6 +17,9 @@ VOICE_CHANNEL_ID="<TARGET-VOICE-CHANNEL-ID>"
 MUSIC_BOT_URL="<YOUR-MUSIC-BOT-URL>"
 ```
 
+If `MUSIC_BOT_URL` is omitted, Jarvis logs a warning and does not attempt to
+send music bot requests.
+
 ## Setup
 1. Install the required Python packages by running the helper script:
 

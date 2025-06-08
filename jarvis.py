@@ -143,6 +143,10 @@ def send_play_command(song_name: str, max_retries: int = 3, retry_delay: float =
     Returns:
         dict: Response from the music bot API, or None on failure
     """
+    if not music_bot_base_url:
+        logging.warning("MUSIC_BOT_URL not configured; skipping play command")
+        return None
+
     url = f"{music_bot_base_url}play"
     payload = {
         "guildId": guild_id,                # Discord Server ID where the bot operates
@@ -178,6 +182,10 @@ def send_command(command: str, max_retries: int = 3, retry_delay: float = 1.0):
     Returns:
         dict: Response from the music bot API, or None on failure
     """
+    if not music_bot_base_url:
+        logging.warning("MUSIC_BOT_URL not configured; skipping command '%s'", command)
+        return None
+
     url = f"{music_bot_base_url}{command}"
     payload = {
         "guildId": guild_id,                # Discord Server ID
