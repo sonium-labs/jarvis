@@ -57,3 +57,11 @@ This document outlines the fundamental principles guiding the development of the
 ---
 
 These principles should serve as a guide for all development decisions. While trade-offs are sometimes necessary, deviations should be consciously evaluated against these core tenets.
+
+## 5. Preserve Helpful Comments
+
+*   **Objective**: Keep existing explanatory comments intact unless they become incorrect or misleading.
+*   **Rationale**: Comments provide valuable context for future maintainers and help explain design choices.
+*   **Implementation**:
+    *   When modifying code, update related comments instead of deleting them.
+    *   Only remove a comment if it is clearly obsolete or redundant.

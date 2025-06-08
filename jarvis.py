@@ -28,9 +28,13 @@ import console_ui
 # Initialize environment variables and global service objects
 load_dotenv()                                 # Load configuration from .env file
 
+# Global flag controlling whether text-to-speech is active
+TTS_ENABLED = True
+
 # ─── async, interruptible text-to-speech ────────────────────────────────
 class AsyncTTS:
-    """Threaded pyttsx3 wrapper with .speak_async() and .stop()."""
+    """Threaded pyttsx3 wrapper with optional global enable/disable."""
+
     def __init__(self):
         self._q = queue.Queue()
         self._thread = threading.Thread(target=self._worker, daemon=True)  # daemon=True allows main program to exit even if thread is running
@@ -40,21 +44,24 @@ class AsyncTTS:
         """Dedicated worker thread for pyttsx3 engine operations."""
         self.engine = pyttsx3.init()
         for text in iter(self._q.get, None):   # sentinel None shuts down
-            self.engine.say(text)
-            self.engine.runAndWait()
+            if TTS_ENABLED:
+                self.engine.say(text)
+                self.engine.runAndWait()
 
     # enqueue text, return immediately
     def speak_async(self, text: str):
-        self._q.put(text)
+        if TTS_ENABLED:
+            self._q.put(text)
 
     # interrupt current speech instantly
     def stop(self):
-        if hasattr(self, "engine"):  # Check if engine has been initialized
+        if TTS_ENABLED and hasattr(self, "engine"):  # Check if engine has been initialized
             self.engine.stop()
 
     # clean shutdown (call in main finally:)
     def shutdown(self):
-        self._q.put(None)
+        if TTS_ENABLED:
+            self._q.put(None)
 
 tts = AsyncTTS()                              # Async text-to-speech engine
 
@@ -87,6 +94,15 @@ shared_stream = _pa.open(format=pyaudio.paInt16,  # 16-bit PCM audio format
                         input=True,                 # Specifies that this is an input stream
                         frames_per_buffer=CHUNK)    # Number of frames per buffer
 # This shared_stream is used by both wake word detection and transcription modules.
+
+def display_microphone_info():
+    """Print information about the microphone Jarvis is using."""
+    try:
+        info = _pa.get_default_input_device_info()
+        name = info.get("name", "Unknown")
+        console_ui.print_info(f"Using microphone: {name}")
+    except Exception as e:
+        console_ui.print_warning(f"Could not determine microphone info: {e}")
 
 def send_play_command(song_name: str):
     """
@@ -243,6 +259,19 @@ def listen_for_voice_commands():
                 tts.speak_async("Huh?")
                 console_ui.print_jarvis_response("Huh?")
 
+def prompt_for_tts():
+    """Ask the user whether text-to-speech should be disabled."""
+    global TTS_ENABLED
+    choice = console_ui.console.input(
+        "[prompt_style]Disable text-to-speech? [y/N]: [/prompt_style]"
+    ).strip().lower()
+    if choice == "y":
+        TTS_ENABLED = False
+        tts.shutdown()
+        console_ui.print_info("Text-to-speech disabled.")
+    else:
+        console_ui.print_info("Text-to-speech enabled.")
+
 def prompt_for_silence_settings():
     """Prompts the user to adjust silence detection settings at startup."""
     console_ui.print_header("Silence Detection Settings (Optional)")
@@ -287,6 +316,8 @@ def main():
     """
     try:
         console_ui.print_header("Jarvis Voice Assistant")
+        display_microphone_info()
+        prompt_for_tts()
         prompt_for_silence_settings() # Prompt user for silence settings before full initialization
         console_ui.print_status("Starting Jarvis...")
         # Start the main loop to listen for wake word and commands
