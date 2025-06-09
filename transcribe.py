@@ -12,10 +12,10 @@ optional environment variables `VOSK_RMS_THRESHOLD` and
 
 import json
 import time
-import threading
 
 import numpy as np
-from vosk import Model, KaldiRecognizer
+from vosk import Model, KaldiRecognizer, SetLogLevel
+from rich.progress import Progress, SpinnerColumn, BarColumn, TextColumn, TimeElapsedColumn
 import console_ui
 import os
 from dotenv import load_dotenv
@@ -34,31 +34,48 @@ SILENCE_CHUNKS_END = int(SILENCE_DURATION_SECONDS * RATE / CHUNK)
 console_ui.print_info(f"Silence detection: RMS Threshold={RMS_THRESHOLD}, Duration={SILENCE_DURATION_SECONDS}s")
 MAX_CHUNKS = int(6 * RATE / CHUNK)             # Max recording chunks: maximum number of chunks to record before stopping (approx. 6 seconds).
 
-# --- Vosk Model Loading with Spinner ---
-_model_load_event = threading.Event() # Event to signal spinner thread to stop
+# --- Vosk Model Loading with Rich Progress ---
+# Suppress verbose Vosk logs
+SetLogLevel(-1)
 
-def _spinner_worker(event, msg=""):
-    """Displays a simple CLI spinner until the event is set."""
-    spinner_chars = "|/-\\"
-    idx = 0
-    while not event.is_set():
-        print(f"\r{msg} {spinner_chars[idx % len(spinner_chars)]}", end="", flush=True)
-        idx += 1
-        time.sleep(0.1)
-    print("\r" + " " * (len(msg) + 2) + "\r", end="", flush=True) # Clear spinner line
+with Progress(
+    SpinnerColumn(),
+    TextColumn("[progress.description]{task.description}"),
+    BarColumn(),
+    TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
+    TimeElapsedColumn(),
+    transient=True
+) as progress:
+    task = progress.add_task("[cyan]Preparing Vosk model...", total=100)
 
-console_ui.print_status("Initializing Vosk model (this may take a moment)...")
-_spinner_thread = threading.Thread(target=_spinner_worker, args=(_model_load_event,))
-_spinner_thread.start()
+    # Simulate initial preparation steps for a smoother start (e.g., 1.5 seconds, up to 60%)
+    simulated_prep_duration = 1.5  # seconds
+    simulated_prep_steps = 15      # number of small updates
+    advance_per_prep_step = 4      # 15 steps * 4% = 60%
 
-# Initialize Vosk components (done once at module load for performance)
-model = Model("model")  # Loads the speech recognition model from the 'model' directory.
-                        # This can be memory-intensive and take time on first load.
-rec = KaldiRecognizer(model, RATE)  # Creates a recognizer instance, configured for the model and sample rate.
-                                    # This object will be used for all subsequent transcriptions.
+    for i in range(simulated_prep_steps):
+        time.sleep(simulated_prep_duration / simulated_prep_steps)
+        progress.update(task, advance=advance_per_prep_step)
+        if i == simulated_prep_steps // 2:
+            progress.update(task, description="[cyan]Loading Vosk components...")
+        if progress.finished: # Allow early exit if progress is cancelled
+            break
+    
+    if not progress.finished:
+        # Actual model loading (progress is at 60% here)
+        progress.update(task, description="[cyan]Loading main Vosk model data (this may take a moment)...", completed=60) # Ensure it's exactly 60
+        model = Model("model")
+        # Model loading finished, now at 99%
+        progress.update(task, completed=99)
+        # Make the 99% state visible for a short duration
+        if not progress.finished: # Check again in case of quick cancellation
+            time.sleep(0.3) # Pause for 0.3 seconds to show 99%
 
-_model_load_event.set() # Signal spinner to stop
-_spinner_thread.join()  # Wait for spinner thread to finish
+    if not progress.finished:
+        # Recognizer initialization (progress is at 99% here)
+        progress.update(task, description="[cyan]Initializing recognizer...")
+        rec = KaldiRecognizer(model, RATE)
+        progress.update(task, completed=100) # Set progress to 100%
 console_ui.print_success("Vosk model loaded successfully.")
 
 # --- Silence Detection Getters and Setters ---

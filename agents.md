@@ -1,67 +1,92 @@
-# Jarvis Voice Assistant: Core Agent Principles
+# Jarvis: Core Technical Directives
 
-This document outlines the fundamental principles guiding the development of the Jarvis Voice Assistant. These principles aim to ensure a high-quality user experience, maintainability, and adherence to the project's vision.
+System architecture and modifications adhere to the following directives to ensure performance, maintainability, and user privacy.
 
-## 1. Prioritize Local Functioning
+## 1. Local Processing Prioritization
 
-*   **Objective**: Maximize offline capability and user privacy by processing data and commands locally wherever feasible.
-*   **Rationale**:
-    *   **Responsiveness**: Local processing significantly reduces latency compared to relying on cloud services.
-    *   **Privacy**: Keeps user data (voice commands, personal information) on the user's device.
-    *   **Reliability**: Ensures core functionality remains available even without an internet connection.
-    *   **Cost**: Avoids potential costs associated with API calls to external services.
-*   **Implementation**:
-    *   Utilize local libraries for wake word detection (e.g., Porcupine), speech-to-text (e.g., Vosk), and text-to-speech (e.g., pyttsx3).
-    *   Minimize reliance on external APIs for core command processing. External calls should be opt-in or for non-critical enhancements (like the current music bot integration, which is understood to be external).
+*   **Directive**: Maximize local data processing for core functions; minimize external API reliance.
+*   **Key Mechanisms**:
+    *   Wake Word: Local (Porcupine).
+    *   Speech-to-Text (STT): Local (Vosk).
+    *   Text-to-Speech (TTS): Local (pyttsx3).
+    *   External APIs: Restricted to non-critical, opt-in features (e.g., music bot integration).
+    *   Benefit: Reduced latency, enhanced privacy, offline capability.
 
-## 2. Maintain a Small and Lightweight Footprint
+## 2. Resource Efficiency
 
-*   **Objective**: Keep the application lean in terms of codebase size, dependencies, and resource consumption.
-*   **Rationale**:
-    *   **Performance**: Lighter applications generally start faster and run more smoothly, especially on less powerful hardware.
-    *   **Maintainability**: A smaller, focused codebase is easier to understand, debug, and extend.
-    *   **Portability**: Easier to package, distribute, and run across different environments.
-    *   **Clarity**: Encourages clear, concise code and avoids unnecessary complexity.
-*   **Implementation**:
-    *   Carefully vet any new dependencies for their size and necessity.
-    *   Prefer Python's standard library or small, efficient third-party libraries.
-    *   Write modular and efficient code.
-    *   Regularly review and refactor to remove dead code or overly complex solutions.
+*   **Directive**: Maintain minimal codebase size, dependency count, and resource (CPU/memory) footprint.
+*   **Key Mechanisms**:
+    *   Dependencies: Scrutinize for necessity and size. Favor standard library or small, performant alternatives.
+    *   Code: Implement modular, efficient algorithms. Conduct regular reviews and refactoring to eliminate redundancy and dead code.
+    *   Benefit: Improved startup, runtime performance, and maintainability.
 
-## 3. Ensure Low Latency and High Responsiveness
+## 3. High Responsiveness & Low Latency
 
-*   **Objective**: Provide an immediate and fluid user experience, which is paramount for a voice assistant.
-*   **Rationale**:
-    *   **User Experience**: Delays in response make a voice assistant feel clunky and frustrating.
-    *   **Natural Interaction**: Mimicking human conversation requires quick feedback and processing.
-*   **Implementation**:
-    *   Optimize critical code paths, especially in audio processing, wake word detection, and transcription.
-    *   Employ asynchronous operations (like the current TTS) where appropriate to prevent blocking the main loop.
-    *   Continuously profile and monitor performance to identify and address bottlenecks.
-    *   Design UI feedback (console or otherwise) to be immediate, even if the full processing takes a moment (e.g., partial transcription updates).
-    *   Silence detection parameters should be tunable to balance responsiveness with capturing the user's full intent.
-    *   Reuse HTTP connections when possible to minimize request latency, but allow disabling pooling if compatibility issues arise.
+*   **Directive**: Ensure immediate system feedback and rapid command execution.
+*   **Key Mechanisms**:
+    *   Critical Paths: Optimize audio processing, wake word, and transcription pipelines.
+    *   Asynchronous Operations: Utilize for non-blocking tasks (e.g., TTS via `AsyncTTS` class).
+    *   Performance Monitoring: Profile and address bottlenecks proactively.
+    *   UI Feedback: Provide immediate console updates (e.g., partial transcription).
+    *   Tunable Parameters: Expose settings like silence detection (RMS threshold, duration) for user optimization.
+    *   HTTP Connections: Employ `requests.Session` for connection pooling to reduce API call latency for external services; allow disabling via `USE_HTTP_SESSION` env var for debugging.
+    *   Benefit: Fluid user interaction.
 
-## 4. Modularity and Clarity
+## 4. Codebase Modularity & Clarity
 
-*   **Objective**: Structure the codebase in a clear, modular way.
-*   **Rationale**:
-    *   **Readability**: Makes it easier for anyone (including future you) to understand the code.
-    *   **Testability**: Well-defined modules are easier to test in isolation.
-    *   **Reusability**: Components can be reused or replaced more easily.
-*   **Implementation**:
-    *   Separate concerns into distinct modules (e.g., `wake_word.py`, `transcribe.py`, `console_ui.py`).
-    *   Use clear naming conventions for variables, functions, and classes.
-    *   Document code effectively, explaining the "why" as much as the "what."
+*   **Directive**: Structure code into distinct, well-defined, and documented modules.
+*   **Key Mechanisms**:
+    *   Module Separation: Isolate concerns (e.g., `wake_word.py`, `transcribe.py`, `console_ui.py`, `jarvis.py` for orchestration).
+    *   Naming Conventions: Adhere to clear, consistent naming for all code elements.
+    *   Documentation: Maintain concise, functional comments explaining purpose and design, especially for public APIs and complex logic.
+    *   Benefit: Enhanced readability, testability, and reusability.
+
+## 5. Comment Preservation & Accuracy
+
+*   **Directive**: Maintain relevant code comments; update or remove only if obsolete or incorrect.
+*   **Key Mechanisms**:
+    *   Review: During code modification, assess and update associated comments.
+    *   Accuracy: Ensure comments reflect current code functionality.
+    *   Benefit: Preserves design rationale and context for future development.
+
+## 6. Git Commit Message Standards
+
+*   **Directive**: Write clear, concise, and factual commit messages that describe the change and its outcome.
+*   **Format**:
+    *   **Subject Line**:
+        *   Use imperative mood (e.g., "Add feature X," not "Added feature X" or "Adds feature X").
+        *   Start with a capital letter.
+        *   Do not end with a period.
+        *   Keep concise (aim for 50 characters or less if possible, max 72).
+        *   Summarize the change directly: state *what* was done.
+    *   **Body (Optional)**:
+        *   Use if the subject line is insufficient to explain the change.
+        *   Separate from subject with a blank line.
+        *   Explain *what* was changed and *why* (the problem solved or goal achieved).
+        *   Describe the *result* or impact of the change.
+        *   Wrap lines at 72 characters.
+*   **Content Guidelines**:
+    *   **Be Specific**: Clearly state the modification (e.g., "Refactor `user_auth` module to use class-based views" instead of "Improved auth").
+    *   **State Outcome**: Describe the functional result (e.g., "Fix bug in `calculate_total` preventing negative inputs" leading to "`calculate_total` now handles negative inputs by returning zero").
+    *   **No Fluff**: Avoid subjective terms, buzzwords (e.g., "optimized," "enhanced," "refactored nicely"), or personal opinions.
+    *   **Factual & Objective**: Stick to what the code change does.
+*   **Example (Good)**:
+    ```
+    Add rate limiting to `/api/login` endpoint
+
+    Implemented token bucket algorithm for rate limiting on the
+    `/api/login` route. This prevents brute-force attacks by
+    restricting login attempts to 5 per minute per IP address.
+
+    Result: Increased security for user authentication.
+    ```
+*   **Example (Needs Improvement)**:
+    ```
+    Fixed stuff
+
+    lots of changes to make it better
+    ```
 
 ---
 
-These principles should serve as a guide for all development decisions. While trade-offs are sometimes necessary, deviations should be consciously evaluated against these core tenets.
-
-## 5. Preserve Helpful Comments
-
-*   **Objective**: Keep existing explanatory comments intact unless they become incorrect or misleading.
-*   **Rationale**: Comments provide valuable context for future maintainers and help explain design choices.
-*   **Implementation**:
-    *   When modifying code, update related comments instead of deleting them.
-    *   Only remove a comment if it is clearly obsolete or redundant.
+These directives guide development. Deviations require explicit justification against these standards.

@@ -263,7 +263,7 @@ def prompt_for_tts():
     """Ask the user whether text-to-speech should be disabled."""
     global TTS_ENABLED
     choice = console_ui.console.input(
-        "[prompt_style]Disable text-to-speech? [y/N]: [/prompt_style]"
+        "[prompt_style]Disable text-to-speech? (y to disable, or press Enter to keep enabled)[y/n]: [/prompt_style]"
     ).strip().lower()
     if choice == "y":
         TTS_ENABLED = False
@@ -315,8 +315,9 @@ def main():
     Ensures proper cleanup of audio resources on exit.
     """
     try:
-        console_ui.print_header("Jarvis Voice Assistant")
+        # Display microphone info early, after transcribe.py's initial output
         display_microphone_info()
+        console_ui.print_header("Jarvis Voice Assistant")
         prompt_for_tts()
         prompt_for_silence_settings() # Prompt user for silence settings before full initialization
         console_ui.print_status("Starting Jarvis...")
