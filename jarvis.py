@@ -22,7 +22,7 @@ import pyttsx3
 import requests
 from dotenv import load_dotenv
 
-from transcribe import record_and_transcribe, get_rms_threshold, set_rms_threshold, get_silence_duration_seconds, set_silence_duration
+from transcribe import record_and_transcribe, get_rms_threshold, set_rms_threshold, get_silence_duration_seconds, set_silence_duration, print_silence_config, initialize_vosk_model
 from wake_word import wait_for_wake_word
 import console_ui
 
@@ -337,7 +337,7 @@ def prompt_for_silence_settings():
     # Silence Duration
     current_duration = get_silence_duration_seconds()
     console_ui.print_info(
-        f"\nCurrent Silence Duration: {current_duration:.1f}s (Default: 1.2s)"
+        f"\nCurrent Silence Duration: {current_duration:.1f}s (Default: 1.5s)"
     )
     console_ui.print_info("Longer duration allows for more pauses; shorter duration is more responsive.")
     new_duration_str = console_ui.console.input(f"[prompt_style]Enter new Silence Duration in seconds (e.g., 0.8-2.5) or press Enter to keep [{current_duration:.1f}s]: [/prompt_style]").strip()
@@ -357,9 +357,9 @@ def main():
     """
     try:
         # Initialize and display configurations in order
-        transcribe.print_silence_config()  # Prints silence detection config from transcribe.py
+        print_silence_config()  # Prints silence detection config from transcribe.py
         display_microphone_info()          # Prints microphone info
-        transcribe.initialize_vosk_model() # Loads Vosk model with progress bar
+        initialize_vosk_model() # Loads Vosk model with progress bar
 
         console_ui.print_header("Jarvis Voice Assistant")
         prompt_for_tts()
