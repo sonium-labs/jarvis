@@ -228,26 +228,11 @@ def listen_for_voice_commands():
                 console_ui.print_jarvis_response(f"Playing {song}")
                 send_play_command(song)
         # Basic playback controls
-        elif "stop"   in command_text_for_matching: 
-            tts.speak_async("Stopping.")
-            console_ui.print_jarvis_response("Stopping.")
-            send_command("stop")
-        elif "pause"  in command_text_for_matching: 
-            tts.speak_async("Pausing.")
-            console_ui.print_jarvis_response("Pausing.")
-            send_command("pause")
-        elif "resume" in command_text_for_matching: 
-            tts.speak_async("Resuming.")
-            console_ui.print_jarvis_response("Resuming.")
-            send_command("resume")
-        elif "next"   in command_text_for_matching: 
-            tts.speak_async("Skipping.")
-            console_ui.print_jarvis_response("Skipping.")
-            send_command("next")
-        elif "clear"  in command_text_for_matching: 
-            tts.speak_async("Clearing.")
-            console_ui.print_jarvis_response("Clearing.")
-            send_command("clear")
+        elif "stop"   in command_text_for_matching: tts.speak_async("Stopping.");  send_command("stop")
+        elif "pause"  in command_text_for_matching: tts.speak_async("Pausing.");   send_command("pause")
+        elif "resume" in command_text_for_matching: tts.speak_async("Resuming.");  send_command("resume")
+        elif "next"   in command_text_for_matching: tts.speak_async("Skipping.");  send_command("next")
+        elif "clear"  in command_text_for_matching: tts.speak_async("Clearing.");  send_command("clear")
         # Exit commands
         elif ("kill" in command_text_for_matching and "self" in command_text_for_matching) or \
              ("self" in command_text_for_matching and "destruct" in command_text_for_matching):
