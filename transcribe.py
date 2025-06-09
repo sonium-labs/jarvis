@@ -22,23 +22,37 @@ from dotenv import load_dotenv
 
 load_dotenv() # Load environment variables for configurable settings
 
+model = None
+rec = None
+SetLogLevel(-1) # Suppress verbose Vosk logs early
+
 # --- Configuration Constants ---
 # Audio stream configuration
 RATE = 16_000        # Sample rate in Hz: samples per second. Must match the Vosk model's expected rate.
 CHUNK = 512          # Frames per buffer: number of audio frames processed at a time. Smaller values can reduce latency but increase CPU load.
 
-# Silence detection configuration (configurable via .env)
+# Silence detection configuration (configurable via .env, initialized by print_silence_config)
 RMS_THRESHOLD = int(os.getenv("VOSK_RMS_THRESHOLD", "900"))
 SILENCE_DURATION_SECONDS = float(os.getenv("VOSK_SILENCE_DURATION_SECONDS", "1.2"))
 SILENCE_CHUNKS_END = int(SILENCE_DURATION_SECONDS * RATE / CHUNK)
 console_ui.print_info(f"Silence detection: RMS Threshold={RMS_THRESHOLD}, Duration={SILENCE_DURATION_SECONDS}s")
 MAX_CHUNKS = int(6 * RATE / CHUNK)             # Max recording chunks: maximum number of chunks to record before stopping (approx. 6 seconds).
 
-# --- Vosk Model Loading with Rich Progress ---
-# Suppress verbose Vosk logs
-SetLogLevel(-1)
+def print_silence_config():
+    """Loads silence detection settings from .env and prints them."""
+    global RMS_THRESHOLD, SILENCE_DURATION_SECONDS, SILENCE_CHUNKS_END
+    RMS_THRESHOLD = int(os.getenv("VOSK_RMS_THRESHOLD", "900"))
+    SILENCE_DURATION_SECONDS = float(os.getenv("VOSK_SILENCE_DURATION_SECONDS", "1.2"))
+    SILENCE_CHUNKS_END = int(SILENCE_DURATION_SECONDS * RATE / CHUNK)
+    console_ui.print_info(f"Silence detection: RMS Threshold={RMS_THRESHOLD}, Duration={SILENCE_DURATION_SECONDS}s")
 
-with Progress(
+
+# --- Vosk Model Loading with Rich Progress ---
+def initialize_vosk_model():
+    """Initializes the Vosk model and recognizer with a progress bar."""
+    global model, rec
+
+    with Progress(
     SpinnerColumn(),
     TextColumn("[progress.description]{task.description}"),
     BarColumn(),
@@ -74,9 +88,17 @@ with Progress(
     if not progress.finished:
         # Recognizer initialization (progress is at 99% here)
         progress.update(task, description="[cyan]Initializing recognizer...")
-        rec = KaldiRecognizer(model, RATE)
+        if model: # Ensure model is loaded
+            rec = KaldiRecognizer(model, RATE)
+        else:
+            console_ui.print_error("Vosk model failed to load. Recognizer cannot be initialized.")
+            # No need to update progress to 100 if model loading failed
+            # The progress bar will close automatically due to transient=True
+            return # Exit the function if model loading failed
+
         progress.update(task, completed=100) # Set progress to 100%
-console_ui.print_success("Vosk model loaded successfully.")
+    console_ui.print_success("Vosk model loaded successfully.")
+
 
 # --- Silence Detection Getters and Setters ---
 def get_rms_threshold() -> int:
@@ -118,6 +140,10 @@ def record_and_transcribe(stream, initial_audio_buffer=None):
     Returns:
         str: Final transcribed text, or empty string if no speech was detected.
     """
+    if not rec:
+        console_ui.print_error("Vosk recognizer not initialized. Cannot transcribe.")
+        return "" # Or yield nothing, depending on how callers handle it.
+
     rec.Reset()  # Reset the recognizer's state to ensure a fresh transcription.
 
     # Prime the recognizer with the initial audio buffer if one is provided.

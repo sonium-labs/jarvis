@@ -15,6 +15,7 @@ and provides voice control over a remote music bot service.
 import os
 import queue
 import threading
+import time
 
 import pyaudio
 import pyttsx3
@@ -104,7 +105,7 @@ def display_microphone_info():
     except Exception as e:
         console_ui.print_warning(f"Could not determine microphone info: {e}")
 
-def send_play_command(song_name: str):
+def send_play_command(song_name: str, max_retries: int = 3, retry_delay: float = 1.0, immediate: bool = False):
     """
     Send request to music bot to play a specific song.
 
@@ -119,15 +120,28 @@ def send_play_command(song_name: str):
         "guildId": guild_id,                # Discord Server ID where the bot operates
         "userId": user_id,                  # Discord User ID of the person issuing the command
         "voiceChannelId": voice_channel_id,  # Discord Voice Channel ID to join/play in
-        "options": {"query": song_name}      # Command-specific options, here the song query
+        "options": {
+            "query": song_name,
+            "immediate": immediate
+        } # Command-specific options, here the song query
     }
-    try:
-        return session.post(url, json=payload).json()
-    except Exception as e:
-        console_ui.print_error(f"Play request failed: {e}")
-        return None
+    for attempt in range(1, max_retries + 1):
+        try:
+            response = session.post(url, json=payload)
+            response.raise_for_status() # Raises HTTPError for bad responses (4XX or 5XX)
+            return response.json()
+        except (requests.exceptions.ConnectionError, requests.exceptions.RequestException) as e:
+            console_ui.print_error(f"Attempt {attempt} to play '{song_name}' failed: {e}")
+            if attempt == max_retries:
+                console_ui.print_error("Max retries reached. Play request failed.")
+                return None
+            time.sleep(retry_delay)
+        except Exception as e: # Catch other unexpected errors
+            console_ui.print_error(f"An unexpected error occurred during play request: {e}")
+            return None
+    return None # Should be unreachable if loop completes, but as a fallback
 
-def send_command(command: str):
+def send_command(command: str, max_retries: int = 3, retry_delay: float = 1.0):
     """
     Send a control command to the music bot.
 
@@ -144,11 +158,66 @@ def send_command(command: str):
         "voiceChannelId": voice_channel_id,  # Discord Voice Channel ID
         "options": {}                       # General commands usually don't need specific options
     }
-    try:
-        return session.post(url, json=payload).json()
-    except Exception as e:
-        console_ui.print_error(f"Command request failed: {e}")
-        return None
+    for attempt in range(1, max_retries + 1):
+        try:
+            response = session.post(url, json=payload)
+            response.raise_for_status()
+            return response.json()
+        except (requests.exceptions.ConnectionError, requests.exceptions.RequestException) as e:
+            console_ui.print_error(f"Attempt {attempt} for command '{command}' failed: {e}")
+            if attempt == max_retries:
+                console_ui.print_error("Max retries reached. Command request failed.")
+                return None
+            time.sleep(retry_delay)
+        except Exception as e: # Catch other unexpected errors
+            console_ui.print_error(f"An unexpected error occurred during command request: {e}")
+            return None
+    return None # Fallback
+
+def handle_play_command(full_command: str) -> tuple[str, bool]:
+    """
+    Parses a full voice command to extract the song name and an 'immediate' flag.
+    Example: "play bohemian rhapsody immediate" -> ("bohemian rhapsody", True)
+    Example: "play yesterday" -> ("yesterday", False)
+
+    Args:
+        full_command (str): The full transcribed command after the wake word.
+                            Expected to start with "play" or "played".
+
+    Returns:
+        tuple[str, bool]: A tuple containing the song name (str) and
+                          a boolean indicating if immediate playback was requested.
+                          Returns (None, False) if parsing fails.
+    """
+    parts = full_command.lower().split()
+    if not parts:
+        return None, False
+
+    # Remove "play" or "played" from the beginning
+    if parts[0] in ("play", "played"):
+        command_parts = parts[1:]
+    else:
+        # This function assumes the command starts with play/played,
+        # based on how it's called in listen_for_voice_commands
+        command_parts = parts
+
+    if not command_parts:
+        return None, False # No song name provided
+
+    immediate = False
+    # Check if the last word is "immediate"
+    if len(command_parts) > 1 and command_parts[-1] == "immediate":
+        immediate = True
+        song_name_parts = command_parts[:-1] # Remove "immediate" from song name
+    else:
+        song_name_parts = command_parts
+
+    if not song_name_parts: # e.g., command was "play immediate"
+        return None, False
+
+    song_name = " ".join(song_name_parts)
+    return song_name, immediate
+
 
 def listen_for_voice_commands():
     """
@@ -172,7 +241,6 @@ def listen_for_voice_commands():
 
         tts.stop()   # interrupt any ongoing speech
         tts.speak_async("Yes?")  # Acknowledge wake word
-        console_ui.print_jarvis_response("Yes?")
         
         transcript = ""
         # Pass the pre_buffered_audio to record_and_transcribe
@@ -206,27 +274,17 @@ def listen_for_voice_commands():
 
         if ("now" in command_text_for_matching and "playing" in command_text_for_matching):
             tts.speak_async("Now playing.")
-            console_ui.print_jarvis_response("Now playing.")
             send_command("now-playing")
-        elif "played" in command_text_for_matching:
-            # Extract song name. Find the start of "played" in the lowercased command string.
-            idx = command_text_for_matching.find("played")
-            # Slice the original-casing 'cleaned_transcript' from after "played" to get the song name.
-            # This preserves the original capitalization of the song title.
-            song = cleaned_transcript[idx + len("played"):].strip()
-            if song:
-                tts.speak_async(f"Playing {song}")
-                console_ui.print_jarvis_response(f"Playing {song}")
-                send_play_command(song)
-        elif "play" in command_text_for_matching:
-            # Similar to "played", extract song name after "play".
-            idx = command_text_for_matching.find("play")
-            # Slice the original-casing 'cleaned_transcript' to preserve song title capitalization.
-            song = cleaned_transcript[idx + len("play"):].strip()
-            if song:
-                tts.speak_async(f"Playing {song}")
-                console_ui.print_jarvis_response(f"Playing {song}")
-                send_play_command(song)
+        elif "play" in command_text_for_matching or "played" in command_text_for_matching:
+            song_name, immediate_flag = handle_play_command(cleaned_transcript)
+            if song_name:
+                tts_message = f"Playing {song_name}"
+                if immediate_flag:
+                    tts_message += " immediately"
+                tts.speak_async(tts_message)
+                send_play_command(song_name, immediate=immediate_flag)
+            else:
+                tts.speak_async("Sorry, what song would you like to play?")
         # Basic playback controls
         elif "stop"   in command_text_for_matching: tts.speak_async("Stopping.");  send_command("stop")
         elif "pause"  in command_text_for_matching: tts.speak_async("Pausing.");   send_command("pause")
@@ -237,12 +295,10 @@ def listen_for_voice_commands():
         elif ("kill" in command_text_for_matching and "self" in command_text_for_matching) or \
              ("self" in command_text_for_matching and "destruct" in command_text_for_matching):
             tts.speak_async("Goodbye.")
-            console_ui.print_jarvis_response("Goodbye.")
             break
         else:
             if cleaned_transcript: # Only say "Huh?" if there was actual text after cleaning
                 tts.speak_async("Huh?")
-                console_ui.print_jarvis_response("Huh?")
 
 def prompt_for_tts():
     """Ask the user whether text-to-speech should be disabled."""
@@ -300,8 +356,11 @@ def main():
     Ensures proper cleanup of audio resources on exit.
     """
     try:
-        # Display microphone info early, after transcribe.py's initial output
-        display_microphone_info()
+        # Initialize and display configurations in order
+        transcribe.print_silence_config()  # Prints silence detection config from transcribe.py
+        display_microphone_info()          # Prints microphone info
+        transcribe.initialize_vosk_model() # Loads Vosk model with progress bar
+
         console_ui.print_header("Jarvis Voice Assistant")
         prompt_for_tts()
         prompt_for_silence_settings() # Prompt user for silence settings before full initialization
