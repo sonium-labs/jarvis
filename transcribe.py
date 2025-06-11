@@ -162,18 +162,23 @@ def record_and_transcribe(stream, initial_audio_buffer=None):
             if isinstance(chunk_data, bytes):
                 rec.AcceptWaveform(chunk_data)
             else:
+
+                # This case should ideally not be reached if wake_word.py correctly returns a list of bytes.
                 console_ui.print_warning(f"Warning: Initial audio buffer contained non-bytes data: {type(chunk_data)}. Skipping this chunk.")
-    
-    silent_chunks_count = 0
-    total_chunks_count = 0
-    last_yielded_partial = ""
+
+    silent_chunks_count = 0  # Counter for consecutive chunks of audio below the RMS silence threshold.
+    total_chunks_count = 0   # Counter for the total number of chunks processed from the live stream.
+    last_yielded_partial = "" # Stores the last partial result yielded to avoid redundant yields of the same text.
 
     while True:
         data = stream.read(CHUNK, exception_on_overflow=False)
         rec.AcceptWaveform(data)
         total_chunks_count += 1
 
-        partial_result_json = rec.PartialResult()
+
+        # ----- Partial result streaming -----
+        # Check for and yield partial transcription results for live feedback.
+        partial_result_json = rec.PartialResult() # Get current partial result from Vosk (as JSON string).
         partial_text = json.loads(partial_result_json).get("partial", "").strip()
 
         if partial_text and partial_text != last_yielded_partial:
@@ -199,5 +204,5 @@ def record_and_transcribe(stream, initial_audio_buffer=None):
 
     final_result_json = rec.FinalResult()
     final_text = json.loads(final_result_json).get("text", "").strip()
-    
-    return final_text
+
+    return final_text  # Return the fully transcribed text, or an empty string if no speech was recognized.

@@ -64,7 +64,7 @@ class AsyncTTS:
         if TTS_ENABLED:
             self._q.put(None)
 
-tts = AsyncTTS()                              # Async text-to-speech engine
+tts = AsyncTTS()                            # Async text-to-speech engine
 
 # HTTP session for reusing connections (improves performance by pooling connections)
 # Set USE_HTTP_SESSION=0 in your .env to disable pooling if it causes issues.
@@ -96,6 +96,7 @@ shared_stream = _pa.open(format=pyaudio.paInt16,  # 16-bit PCM audio format
                         frames_per_buffer=CHUNK)    # Number of frames per buffer
 # This shared_stream is used by both wake word detection and transcription modules.
 
+
 def display_microphone_info():
     """Print information about the microphone Jarvis is using."""
     try:
@@ -107,10 +108,13 @@ def display_microphone_info():
 
 def send_play_command(song_name: str, max_retries: int = 3, retry_delay: float = 1.0, immediate: bool = False):
     """
-    Send request to music bot to play a specific song.
+    Send request to music bot to play a specific song, with retry logic.
 
     Args:
         song_name: Name/query of the song to play
+        max_retries: Maximum number of retries on failure
+        retry_delay: Delay (in seconds) between retries
+        immediate: Whether to include the "immediate" option in the API call
 
     Returns:
         dict: Response from the music bot API, or None on failure
@@ -122,6 +126,7 @@ def send_play_command(song_name: str, max_retries: int = 3, retry_delay: float =
         "voiceChannelId": voice_channel_id,  # Discord Voice Channel ID to join/play in
         "options": {
             "query": song_name,
+
             "immediate": immediate
         } # Command-specific options, here the song query
     }
@@ -135,7 +140,7 @@ def send_play_command(song_name: str, max_retries: int = 3, retry_delay: float =
             if attempt == max_retries:
                 console_ui.print_error("Max retries reached. Play request failed.")
                 return None
-            time.sleep(retry_delay)
+            time.sleep(retry_delay) # Wait before retrying
         except Exception as e: # Catch other unexpected errors
             console_ui.print_error(f"An unexpected error occurred during play request: {e}")
             return None
@@ -143,10 +148,12 @@ def send_play_command(song_name: str, max_retries: int = 3, retry_delay: float =
 
 def send_command(command: str, max_retries: int = 3, retry_delay: float = 1.0):
     """
-    Send a control command to the music bot.
+    Send a control command to the music bot, with retry logic.
 
     Args:
         command: Command name (e.g., 'pause', 'resume', 'stop')
+        max_retries: Maximum number of retries on failure
+        retry_delay: Delay (in seconds) between retries
 
     Returns:
         dict: Response from the music bot API, or None on failure
@@ -161,68 +168,45 @@ def send_command(command: str, max_retries: int = 3, retry_delay: float = 1.0):
     for attempt in range(1, max_retries + 1):
         try:
             response = session.post(url, json=payload)
-            response.raise_for_status()
+            response.raise_for_status()  # Raise an HTTPError for bad responses (4xx and 5xx)
             return response.json()
         except (requests.exceptions.ConnectionError, requests.exceptions.RequestException) as e:
-            console_ui.print_error(f"Attempt {attempt} for command '{command}' failed: {e}")
+            print(f"Attempt {attempt} to send command '{command}' failed: {e}")
             if attempt == max_retries:
-                console_ui.print_error("Max retries reached. Command request failed.")
+                print("Max retries reached. Command request failed.")
                 return None
-            time.sleep(retry_delay)
-        except Exception as e: # Catch other unexpected errors
-            console_ui.print_error(f"An unexpected error occurred during command request: {e}")
-            return None
-    return None # Fallback
+            time.sleep(retry_delay)  # Wait before retrying
 
-def handle_play_command(full_command: str) -> tuple[str, bool]:
+def handle_play_command(cleaned_transcript: str, keyword: str):
     """
-    Parses a full voice command to extract the song name and an 'immediate' flag.
-    Example: "play bohemian rhapsody immediate" -> ("bohemian rhapsody", True)
-    Example: "play yesterday" -> ("yesterday", False)
+    Handle play-related commands by extracting the song name and calling send_play_command.
 
     Args:
-        full_command (str): The full transcribed command after the wake word.
-                            Expected to start with "play" or "played".
-
-    Returns:
-        tuple[str, bool]: A tuple containing the song name (str) and
-                          a boolean indicating if immediate playback was requested.
-                          Returns (None, False) if parsing fails.
+        cleaned_transcript: The cleaned user input.
+        keyword: The keyword to look for in the transcript (e.g., "play", "played").
     """
-    parts = full_command.lower().split()
-    if not parts:
-        return None, False
+    idx = cleaned_transcript.lower().find(keyword)
+    remaining_text = cleaned_transcript[idx + len(keyword):].strip()  # Extract text after the keyword
 
-    # Remove "play" or "played" from the beginning
-    if parts[0] in ("play", "played"):
-        command_parts = parts[1:]
-    else:
-        # This function assumes the command starts with play/played,
-        # based on how it's called in listen_for_voice_commands
-        command_parts = parts
-
-    if not command_parts:
-        return None, False # No song name provided
-
+    # Check if "immediate" is in the remaining text
     immediate = False
-    # Check if the last word is "immediate"
-    if len(command_parts) > 1 and command_parts[-1] == "immediate":
+    if remaining_text.lower().startswith("immediate"):
         immediate = True
-        song_name_parts = command_parts[:-1] # Remove "immediate" from song name
-    else:
-        song_name_parts = command_parts
+        # Remove "immediate" from the remaining text
+        remaining_text = remaining_text[len("immediate"):].strip()
+    elif remaining_text.lower().startswith("immediately"):
+        immediate = True
+        # Remove "immediate" from the remaining text
+        remaining_text = remaining_text[len("immediately"):].strip()
 
-    if not song_name_parts: # e.g., command was "play immediate"
-        return None, False
-
-    song_name = " ".join(song_name_parts)
-    return song_name, immediate
-
+    song = remaining_text  # The remaining text is the song name
+    if song:
+        tts.speak_async(f"Playing {song}")
+        send_play_command(song, immediate=immediate)
 
 def listen_for_voice_commands():
     """
     Main voice command loop.
-    
     Continuously listens for wake word, transcribes subsequent speech,
     interprets commands, and executes appropriate actions. Supports
     music playback control and self-termination commands.
@@ -231,7 +215,6 @@ def listen_for_voice_commands():
         console_ui.print_command_prompt()
         # wait_for_wake_word now returns the pre-buffered audio
         pre_buffered_audio = wait_for_wake_word(shared_stream)
-        
         # If pre_buffered_audio is empty, it might mean Porcupine isn't initialized
         # or an error occurred. We can choose to continue or handle it.
         # For now, we'll proceed, and transcribe.py will handle an empty buffer.
@@ -241,7 +224,6 @@ def listen_for_voice_commands():
 
         tts.stop()   # interrupt any ongoing speech
         tts.speak_async("Yes?")  # Acknowledge wake word
-        
         transcript = ""
         # Pass the pre_buffered_audio to record_and_transcribe
         for partial in record_and_transcribe(shared_stream, initial_audio_buffer=pre_buffered_audio):
@@ -251,11 +233,11 @@ def listen_for_voice_commands():
         console_ui.clear_line_then_print() # Clears the partial transcription line
         # Remove "Jarvis" if it's at the beginning of the transcript, case-insensitively,
         # and handle potential following comma/space.
-        cleaned_transcript = transcript 
+        cleaned_transcript = transcript
         words = transcript.split(None, 1) # Split into first word and the rest
         if words and words[0].lower().rstrip(',') == "jarvis":
             cleaned_transcript = words[1] if len(words) > 1 else ""
-        
+
         cleaned_transcript = cleaned_transcript.strip() # Final strip for good measure
 
         # Check for 'cancel' command first
@@ -267,7 +249,6 @@ def listen_for_voice_commands():
 
         console_ui.print_user_said(cleaned_transcript)
 
-
         # Command interpretation and execution
         # Use a lowercased version of the cleaned_transcript for command matching.
         command_text_for_matching = cleaned_transcript.lower()
@@ -275,22 +256,38 @@ def listen_for_voice_commands():
         if ("now" in command_text_for_matching and "playing" in command_text_for_matching):
             tts.speak_async("Now playing.")
             send_command("now-playing")
-        elif "play" in command_text_for_matching or "played" in command_text_for_matching:
+            # AI code to condense the play and played,
+            # Use the dedicated parser to extract the song name and whether it should be played immediately.
             song_name, immediate_flag = handle_play_command(cleaned_transcript)
+
+            # If a song name was successfully parsed, proceed to play it.
             if song_name:
+                # Construct the feedback message for the user.
                 tts_message = f"Playing {song_name}"
                 if immediate_flag:
-                    tts_message += " immediately"
+                    tts_message += " immediately"  # Append "immediately" to the TTS if the flag is set.
                 tts.speak_async(tts_message)
+
+                # Send the command to the music bot API.
                 send_play_command(song_name, immediate=immediate_flag)
             else:
-                tts.speak_async("Sorry, what song would you like to play?")
+                tts.speak_async("Sorry, what?")
         # Basic playback controls
-        elif "stop"   in command_text_for_matching: tts.speak_async("Stopping.");  send_command("stop")
-        elif "pause"  in command_text_for_matching: tts.speak_async("Pausing.");   send_command("pause")
-        elif "resume" in command_text_for_matching: tts.speak_async("Resuming.");  send_command("resume")
-        elif "next"   in command_text_for_matching: tts.speak_async("Skipping.");  send_command("next")
-        elif "clear"  in command_text_for_matching: tts.speak_async("Clearing.");  send_command("clear")
+        elif "stop" in command_text_for_matching:
+            tts.speak_async("Stopping.")
+            send_command("stop")
+        elif "pause" in command_text_for_matching:
+            tts.speak_async("Pausing.")
+            send_command("pause")
+        elif "resume" in command_text_for_matching:
+            tts.speak_async("Resuming.")
+            send_command("resume")
+        elif ("next" in command_text_for_matching) or ("skip" in command_text_for_matching):
+            tts.speak_async("Skipping.")
+            send_command("next")
+        elif "clear" in command_text_for_matching:
+            tts.speak_async("Clearing.")
+            send_command("clear")
         # Exit commands
         elif ("kill" in command_text_for_matching and "self" in command_text_for_matching) or \
              ("self" in command_text_for_matching and "destruct" in command_text_for_matching):
@@ -352,7 +349,7 @@ def prompt_for_silence_settings():
 def main():
     """
     Entry point: Initialize and run the voice assistant.
-    
+
     Ensures proper cleanup of audio resources on exit.
     """
     try:

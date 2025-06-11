@@ -1,10 +1,12 @@
 # Jarvis
+![image](https://github.com/user-attachments/assets/66ffb78c-fc72-410e-a3e4-7a785a508364)
+
 
 ## Overview
 Jarvis is a small voice control script that listens for commands and sends them
 to a remote Discord music bot using HTTP requests.
 
-Get a key from [here](https://console.picovoice.ai/signup) and create a new file
+Get a Porcupine key from [here](https://console.picovoice.ai/signup) and create a new file
 named `.env` in this directory containing your Porcupine and Discord details:
 
 ```
@@ -38,15 +40,15 @@ pip install pyaudio vosk pvporcupine numpy pyttsx3 requests python-dotenv
 ## Usage
 `python jarvis.py`
 
-Then say: _"Jarvis, play hampster dance"_ (using your default microphone) and Jarvis
+Then say: _"Jarvis, play hamster dance"_ (using your default microphone) and Jarvis
 will instruct the music bot to play it. Works with other common commands too:
 
 | 🔤 Phrase              | 🛠️ Action Performed               | 📤 Command Sent                              |
 | ---------------------- | ---------------------------------- | --------------------------------------------- |
 | `"play [song name]"`   | Play a song by name                | `/play [song name]`                           |
-| `"now playing"`        | Display current track              | `/now-playing`                                |
 | `"pause"`              | Pause playback                     | `/pause`                                      |
 | `"resume"`             | Resume paused playback             | `/resume`                                     |
 | `"next"`               | Skip to the next song              | `/next`                                       |
 | `"clear"`              | Clear the playlist or queue        | `/clear`                                      |
 | `"stop"`               | Stop playback                      | `/stop`                                       |
+| `"now playing"`        | Display current track              | `/now-playing`                                |
