@@ -219,6 +219,10 @@ def handle_play_command(cleaned_transcript: str, keyword: str):
         immediate = True
         # Remove "immediate" from the remaining text
         remaining_text = remaining_text[len("immediate"):].strip()
+    elif remaining_text.lower().startswith("immediately"):
+        immediate = True
+        # Remove "immediate" from the remaining text
+        remaining_text = remaining_text[len("immediately"):].strip()
 
     song = remaining_text  # The remaining text is the song name
     if song:
@@ -270,7 +274,6 @@ def listen_for_voice_commands():
 
         print(f"You said: {cleaned_transcript}")
 
-
         # Command interpretation and execution
         # Use a lowercased version of the cleaned_transcript for command matching.
         command_text_for_matching = cleaned_transcript.lower()
@@ -292,7 +295,7 @@ def listen_for_voice_commands():
         elif "resume" in command_text_for_matching:
             tts.speak_async("Resuming.")
             send_command("resume")
-        elif "next" in command_text_for_matching:
+        elif ("next" in command_text_for_matching) or ("skip" in command_text_for_matching):
             tts.speak_async("Skipping.")
             send_command("next")
         elif "clear" in command_text_for_matching:

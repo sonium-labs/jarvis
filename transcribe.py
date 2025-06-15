@@ -20,7 +20,7 @@ CHUNK = 512          # Frames per buffer: number of audio frames processed at a 
 
 # Silence detection configuration
 RMS_THRESHOLD = 900               # RMS amplitude: threshold below which audio is considered silent.
-SILENCE_CHUNKS_END = int(1.2 * RATE / CHUNK)   # Silent chunks to stop: number of consecutive silent chunks before transcription stops (approx. 1.2 seconds).
+SILENCE_CHUNKS_END = int(1.5 * RATE / CHUNK)   # Silent chunks to stop: number of consecutive silent chunks before transcription stops (approx. 1.2 seconds).
 MAX_CHUNKS = int(6 * RATE / CHUNK)             # Max recording chunks: maximum number of chunks to record before stopping (approx. 6 seconds).
 
 # --- Vosk Model Loading with Spinner ---
@@ -80,7 +80,7 @@ def record_and_transcribe(stream, initial_audio_buffer=None):
             else:
                 # This case should ideally not be reached if wake_word.py correctly returns a list of bytes.
                 print(f"Warning: Initial audio buffer contained non-bytes data: {type(chunk_data)}. Skipping this chunk.")
-    
+
     silent_chunks_count = 0  # Counter for consecutive chunks of audio below the RMS silence threshold.
     total_chunks_count = 0   # Counter for the total number of chunks processed from the live stream.
     last_yielded_partial = "" # Stores the last partial result yielded to avoid redundant yields of the same text.
@@ -93,12 +93,12 @@ def record_and_transcribe(stream, initial_audio_buffer=None):
         data = stream.read(CHUNK, exception_on_overflow=False)
         rec.AcceptWaveform(data)    # Feed the live audio data to the Vosk recognizer.
         total_chunks_count += 1
-        
+
         # ----- Partial result streaming -----
         # Check for and yield partial transcription results for live feedback.
         partial_result_json = rec.PartialResult() # Get current partial result from Vosk (as JSON string).
         partial_text = json.loads(partial_result_json).get("partial", "").strip()
-        
+
         if partial_text and partial_text != last_yielded_partial:
             yield partial_text  # Stream out new words as they are recognized.
             last_yielded_partial = partial_text
@@ -129,6 +129,7 @@ def record_and_transcribe(stream, initial_audio_buffer=None):
     # After the loop (due to silence or max duration), get the final transcription result.
     final_result_json = rec.FinalResult()  # Get the definitive final result from Vosk (as JSON string).
     final_text = json.loads(final_result_json).get("text", "").strip()
+
 
     # Yield the final text if it contains additional words that were not part of
     # the last partial result so callers iterating over this generator receive
