@@ -127,7 +127,14 @@ def record_and_transcribe(stream, initial_audio_buffer=None):
             break
 
     # After the loop (due to silence or max duration), get the final transcription result.
-    final_result_json = rec.FinalResult() # Get the definitive final result from Vosk (as JSON string).
+    final_result_json = rec.FinalResult()  # Get the definitive final result from Vosk (as JSON string).
     final_text = json.loads(final_result_json).get("text", "").strip()
 
-    return final_text  # Return the fully transcribed text, or an empty string if no speech was recognized.
+
+    # Yield the final text if it contains additional words that were not part of
+    # the last partial result so callers iterating over this generator receive
+    # the complete transcription.
+    if final_text and final_text != last_yielded_partial:
+        yield final_text
+
+    return final_text  # Return the fully transcribed text, or an empty string if no speech was recognised.
