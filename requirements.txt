@@ -5,3 +5,4 @@ numpy
 pyttsx3
 requests
 python-dotenv
+rich

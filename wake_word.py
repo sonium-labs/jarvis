@@ -4,6 +4,7 @@ import numpy as np
 import os
 import collections
 from dotenv import load_dotenv
+import console_ui
 
 load_dotenv()
 
@@ -15,7 +16,7 @@ try:
         keywords=["jarvis"]
     )
 except pvporcupine.PorcupineError as e:
-    print(f"Failed to initialize Porcupine: {e}")
+    console_ui.print_error(f"Failed to initialize Porcupine: {e}")
     # Handle error appropriately, e.g., raise an exception or exit
 
 # Configuration for the rolling buffer
@@ -36,13 +37,12 @@ def wait_for_wake_word(stream):
     Returns an empty list if Porcupine is not initialized or an error occurs.
     """
     if not porcupine:
-        print("Error: Porcupine not initialized. Cannot listen for wake word.")
+        console_ui.print_error("Error: Porcupine not initialized. Cannot listen for wake word.")
         return []
 
     audio_buffer = collections.deque(maxlen=NUM_BUFFER_CHUNKS)
     
     try:
-        print(f"Listening for wake word (buffering ~{BUFFER_SECONDS:.1f}s of audio)...")
         while True:
             # Read audio data in chunks matching Porcupine's frame length
             pcm_bytes = stream.read(porcupine.frame_length,
@@ -56,8 +56,7 @@ def wait_for_wake_word(stream):
             pcm = np.frombuffer(pcm_bytes, dtype=np.int16)
             
             if porcupine.process(pcm) >= 0:
-                print("Wake word detected!")
                 return list(audio_buffer)  # Return the buffered audio chunks
     except Exception as e:
-        print(f"Wake-word listening error: {e}")
+        console_ui.print_error(f"Wake-word listening error: {e}")
         return [] # Return empty list on error
