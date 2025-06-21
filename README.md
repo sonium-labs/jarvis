@@ -15,15 +15,7 @@ GUILD_ID="<DISCORD-GUILD-ID>"
 USER_ID="<YOUR-DISCORD-USER-ID>"
 VOICE_CHANNEL_ID="<TARGET-VOICE-CHANNEL-ID>"
 MUSIC_BOT_URL="<YOUR-MUSIC-BOT-URL>"
-USE_HTTP_SESSION=1
-VOSK_RMS_THRESHOLD=900
-VOSK_SILENCE_DURATION_SECONDS=1.2
 ```
-The last three variables are optional. `USE_HTTP_SESSION` controls whether HTTP
-connections are pooled. Set it to `0` if the music bot has trouble with
-persistent connections. `VOSK_RMS_THRESHOLD` and
-`VOSK_SILENCE_DURATION_SECONDS` adjust the silence detection sensitivity.
-Jarvis shows these values at startup and lets you adjust them interactively.
 
 If `MUSIC_BOT_URL` is omitted, Jarvis logs a warning and does not attempt to
 send music bot requests.
