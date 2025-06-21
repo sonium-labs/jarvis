@@ -1,24 +1,19 @@
 """
 Main Jarvis voice assistant orchestrator.
-
-This module coordinates the voice assistant's core functionality, including:
-- Wake word detection
-- Speech-to-text transcription
-- Command interpretation
-- Text-to-speech response
-- Music control via REST API integration
-
-The assistant maintains a single shared microphone stream for efficiency
-and provides voice control over a remote music bot service.
 """
 
+import logging
 import os
 import queue
 import threading
 import time
+import weakref
 
+import comtypes.client
 import pyaudio
 import pyttsx3
+import pyttsx3.drivers.sapi5 as sapi5
+import pythoncom
 import requests
 from dotenv import load_dotenv
 
@@ -26,6 +21,21 @@ from transcribe import record_and_transcribe, get_rms_threshold, set_rms_thresho
 from wake_word import wait_for_wake_word
 import console_ui
 
+# --- Monkey-patch sapi5 driver to skip broken default voice assignment ---
+def patched_sapi5_init(self, proxy):
+    self._tts = comtypes.client.CreateObject('SAPI.SpVoice')
+    self._tts.EventInterests = 33790
+    self._event_sink = sapi5.SAPI5DriverEventSink()
+    self._event_sink.setDriver(weakref.proxy(self))
+    self._advise = comtypes.client.GetEvents(self._tts, self._event_sink)
+    self._proxy = proxy
+    self._looping = False
+    self._speaking = False
+    self._stopping = False
+    self._current_text = ''
+    self._rateWpm = 200
+
+sapi5.SAPI5Driver.__init__ = patched_sapi5_init
 # Initialize environment variables and global service objects
 load_dotenv()                                 # Load configuration from .env file
 
@@ -33,15 +43,52 @@ load_dotenv()                                 # Load configuration from .env fil
 TTS_ENABLED = True
 
 # ─── async, interruptible text-to-speech ────────────────────────────────
+
 class AsyncTTS:
+    """Asynchronous TTS using raw COM SAPI with guaranteed voice control."""
     """Threaded pyttsx3 wrapper with optional global enable/disable."""
 
     def __init__(self):
         self._q = queue.Queue()
-        self._thread = threading.Thread(target=self._worker, daemon=True)  # daemon=True allows main program to exit even if thread is running
+        self._thread = threading.Thread(target=self._worker, daemon=True)
         self._thread.start()
 
     def _worker(self):
+        pythoncom.CoInitialize()
+
+        try:
+            self.engine = comtypes.client.CreateObject("SAPI.SpVoice")
+            voices = self.engine.GetVoices()
+            print("\nAvailable voices from COM:")
+
+            selected = None
+            for v in voices:
+                desc = v.GetDescription()
+                print(f"- {desc} | {v.Id}")
+                if "DAVID" in desc.upper():
+                    selected = v
+                    break
+            if not selected:
+                for v in voices:
+                    if "ZIRA" in v.GetDescription().upper():
+                        selected = v
+                        break
+            if not selected:
+                raise RuntimeError("No preferred voice found.")
+
+            self.engine.Voice = selected
+            print(f"Using raw COM voice: {selected.GetDescription()}")
+
+        except Exception as e:
+            print("COM TTS init failed:", e)
+            return
+
+        for text in iter(self._q.get, None):
+            try:
+                self.engine.Speak(text)
+            except Exception as e:
+                print("COM TTS speak failed:", e)
+
         """Dedicated worker thread for pyttsx3 engine operations."""
         self.engine = pyttsx3.init()
         for text in iter(self._q.get, None):   # sentinel None shuts down
@@ -54,8 +101,13 @@ class AsyncTTS:
         if TTS_ENABLED:
             self._q.put(text)
 
-    # interrupt current speech instantly
     def stop(self):
+        try:
+            if hasattr(self, "engine"):
+                self.engine.Speak("", 3)  # SVSFPurgeBeforeSpeak = 3
+        except Exception as e:
+            print("COM TTS stop failed:", e)
+
         if TTS_ENABLED and hasattr(self, "engine"):  # Check if engine has been initialized
             self.engine.stop()
 
@@ -119,6 +171,10 @@ def send_play_command(song_name: str, max_retries: int = 3, retry_delay: float =
     Returns:
         dict: Response from the music bot API, or None on failure
     """
+    if not music_bot_base_url:
+        logging.warning("MUSIC_BOT_URL not configured; skipping play command")
+        return None
+
     url = f"{music_bot_base_url}play"
     payload = {
         "guildId": guild_id,                # Discord Server ID where the bot operates
@@ -158,6 +214,10 @@ def send_command(command: str, max_retries: int = 3, retry_delay: float = 1.0):
     Returns:
         dict: Response from the music bot API, or None on failure
     """
+    if not music_bot_base_url:
+        logging.warning("MUSIC_BOT_URL not configured; skipping command '%s'", command)
+        return None
+
     url = f"{music_bot_base_url}{command}"
     payload = {
         "guildId": guild_id,                # Discord Server ID
@@ -379,3 +439,4 @@ def main():
 # Standard Python entry point: ensures main() is called only when the script is executed directly.
 if __name__ == "__main__":
     main()
+
